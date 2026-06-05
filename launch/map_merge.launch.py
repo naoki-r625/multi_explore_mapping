@@ -33,14 +33,14 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         name='static_map_to_r1_map',
-        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'map', 'robot_1/map'],
+        arguments=['3.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'map', 'robot_1/map'],
     )
 
     static_tf_r2 = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='static_map_to_r2_map',
-        arguments=['0.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'map', 'robot_2/map'],
+        arguments=['-3.0', '0.0', '0.0', '0.0', '0.0', '0.0', 'map', 'robot_2/map'],
     )
 
     return LaunchDescription([
