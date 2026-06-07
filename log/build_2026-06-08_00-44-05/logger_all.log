@@ -1,0 +1,107 @@
+[0.216s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build', '--packages-select', 'multi_explore_mapping']
+[0.217s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=False, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=16, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=['multi_explore_mapping'], packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, verb_parser=<colcon_defaults.argument_parser.defaults.DefaultArgumentsDecorator object at 0x7315c43553c0>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x7315c4354f70>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x7315c4354f70>>)
+[0.499s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.499s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.499s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.499s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.499s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[0.500s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.500s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/home/naoki/ros2_ws/src/multi_explore_mapping'
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[0.500s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[0.514s] DEBUG:colcon.colcon_core.package_identification:Package '.' with type 'ros.ament_cmake' and name 'multi_explore_mapping'
+[0.514s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.514s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[0.514s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[0.514s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[0.514s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[0.536s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.536s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.553s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 9 installed packages in /home/naoki/ros2_ws/install
+[0.554s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 9 installed packages in /home/naoki/ros2_ws/src/install
+[0.556s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 391 installed packages in /opt/ros/humble
+[0.557s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.663s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_args' from command line to 'None'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_target' from command line to 'None'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_clean_cache' from command line to 'False'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_clean_first' from command line to 'False'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'cmake_force_configure' from command line to 'False'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'ament_cmake_args' from command line to 'None'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'catkin_cmake_args' from command line to 'None'
+[0.664s] Level 5:colcon.colcon_core.verb:set package 'multi_explore_mapping' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.664s] DEBUG:colcon.colcon_core.verb:Building package 'multi_explore_mapping' with the following arguments: {'ament_cmake_args': None, 'build_base': '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping', 'merge_install': False, 'path': '/home/naoki/ros2_ws/src/multi_explore_mapping', 'symlink_install': False, 'test_result_base': None}
+[0.664s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.665s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.665s] INFO:colcon.colcon_ros.task.ament_cmake.build:Building ROS package in '/home/naoki/ros2_ws/src/multi_explore_mapping' with build type 'ament_cmake'
+[0.665s] INFO:colcon.colcon_cmake.task.cmake.build:Building CMake package in '/home/naoki/ros2_ws/src/multi_explore_mapping'
+[0.669s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.669s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.669s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.677s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --build /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping -- -j16 -l16
+[10.503s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --build /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping -- -j16 -l16
+[10.508s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --install /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping
+[10.519s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(multi_explore_mapping)
+[10.520s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --install /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping
+[10.524s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping' for CMake module files
+[10.525s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping' for CMake config files
+[10.525s] Level 1:colcon.colcon_core.shell:create_environment_hook('multi_explore_mapping', 'cmake_prefix_path')
+[10.525s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.ps1'
+[10.526s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.dsv'
+[10.526s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.sh'
+[10.527s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib'
+[10.527s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/bin'
+[10.527s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/pkgconfig/multi_explore_mapping.pc'
+[10.527s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/python3.10/site-packages'
+[10.527s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/bin'
+[10.528s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.ps1'
+[10.528s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.dsv'
+[10.529s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.sh'
+[10.530s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.bash'
+[10.530s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.zsh'
+[10.531s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/colcon-core/packages/multi_explore_mapping)
+[10.531s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(multi_explore_mapping)
+[10.531s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping' for CMake module files
+[10.531s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping' for CMake config files
+[10.532s] Level 1:colcon.colcon_core.shell:create_environment_hook('multi_explore_mapping', 'cmake_prefix_path')
+[10.532s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.ps1'
+[10.532s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.dsv'
+[10.532s] INFO:colcon.colcon_core.shell:Creating environment hook '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/hook/cmake_prefix_path.sh'
+[10.533s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib'
+[10.533s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/bin'
+[10.533s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/pkgconfig/multi_explore_mapping.pc'
+[10.533s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/python3.10/site-packages'
+[10.533s] Level 1:colcon.colcon_core.environment:checking '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/bin'
+[10.533s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.ps1'
+[10.534s] INFO:colcon.colcon_core.shell:Creating package descriptor '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.dsv'
+[10.534s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.sh'
+[10.534s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.bash'
+[10.535s] INFO:colcon.colcon_core.shell:Creating package script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.zsh'
+[10.535s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/colcon-core/packages/multi_explore_mapping)
+[10.535s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[10.536s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[10.536s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[10.536s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[10.559s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.notify_send': Could not find 'notify-send'
+[10.559s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[10.559s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[10.559s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[10.559s] DEBUG:colcon.colcon_notification.desktop_notification.notify2:Failed to initialize notify2: org.freedesktop.DBus.Error.FileNotFound: Failed to connect to socket /run/user/1000/bus: No such file or directory
+[10.559s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[10.559s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/local_setup.ps1'
+[10.560s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/naoki/ros2_ws/src/multi_explore_mapping/install/_local_setup_util_ps1.py'
+[10.561s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/setup.ps1'
+[10.562s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/local_setup.sh'
+[10.563s] INFO:colcon.colcon_core.shell:Creating prefix util module '/home/naoki/ros2_ws/src/multi_explore_mapping/install/_local_setup_util_sh.py'
+[10.563s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/setup.sh'
+[10.564s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/local_setup.bash'
+[10.564s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/setup.bash'
+[10.565s] INFO:colcon.colcon_core.shell:Creating prefix script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/local_setup.zsh'
+[10.566s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/home/naoki/ros2_ws/src/multi_explore_mapping/install/setup.zsh'
