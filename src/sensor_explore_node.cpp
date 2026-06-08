@@ -134,8 +134,15 @@ private:
 
         // --- 【対策1】直進を止めるための「前方＋斜め前方」の監視範囲を定義 ---
         // 元の30°から45°〜50°に広げることで、斜めからの接近を100%捕捉します
-        double front_block_rad = deg_to_rad(45.0); 
+        double front_block_rad = deg_to_rad(60.0); 
         double front_dist = get_min_distance_in_range(-front_block_rad, front_block_rad);
+
+        // --- 【変更点1】360度（全範囲）の最小距離を取得 ---
+        // LiDARの全スキャン範囲（最新データの angle_min から angle_max まで）をそのまま指定します
+        //double all_range_dist = get_min_distance_in_range(
+        //    latest_scan_.angle_min, 
+        //    latest_scan_.angle_max
+        //);
 
         // --- 【対策2】回避方向（左右）を決めるエリアを真横から「斜め前方」にシフト ---
         // 旋回して逃げる先のスペースが本当にあるかを、より前寄りの角度で評価します

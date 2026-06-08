@@ -15,7 +15,7 @@ def generate_launch_description():
             'robot_1_init_x':   0.0,
             'robot_1_init_y':   0.0,
             'robot_1_init_yaw': 0.0,
-            'robot_2_init_x':  0.0,
+            'robot_2_init_x':   0.0,
             'robot_2_init_y':   0.0,
             'robot_2_init_yaw': 0.0,
             # ICP パラメータ
