@@ -103,6 +103,26 @@ if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_
 endif()
 
 if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
+  if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node" AND
+     NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node")
+    file(RPATH_CHECK
+         FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node"
+         RPATH "")
+  endif()
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping" TYPE EXECUTABLE FILES "/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping/frontier_explore_node")
+  if(EXISTS "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node" AND
+     NOT IS_SYMLINK "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node")
+    file(RPATH_CHANGE
+         FILE "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node"
+         OLD_RPATH "/opt/ros/humble/lib:"
+         NEW_RPATH "")
+    if(CMAKE_INSTALL_DO_STRIP)
+      execute_process(COMMAND "/usr/bin/strip" "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/lib/multi_explore_mapping/frontier_explore_node")
+    endif()
+  endif()
+endif()
+
+if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/include" TYPE DIRECTORY FILES "/home/naoki/ros2_ws/src/multi_explore_mapping/include/")
 endif()
 
@@ -111,6 +131,7 @@ if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_
     "/home/naoki/ros2_ws/src/multi_explore_mapping/launch"
     "/home/naoki/ros2_ws/src/multi_explore_mapping/worlds"
     "/home/naoki/ros2_ws/src/multi_explore_mapping/models"
+    "/home/naoki/ros2_ws/src/multi_explore_mapping/config"
     )
 endif()
 

@@ -17,6 +17,7 @@
   <depend>nav2_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2_ros</depend>
+  <depend>rclcpp_action</depend>
 
   <!-- ✅ ICP実装に必要な依存を追加 -->
   <depend>Eigen3</depend>
@@ -24,8 +25,11 @@
   <depend>cv_bridge</depend>
   <depend>tf2_geometry_msgs</depend>
 
+  <depend>visualization_msgs</depend>
+
   <!-- launch 時に必要だが C++ リンク不要 (exec only) -->
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
   <exec_depend>slam_toolbox</exec_depend>
   <exec_depend>multirobot_map_merge</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>

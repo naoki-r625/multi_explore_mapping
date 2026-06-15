@@ -249,6 +249,19 @@ icp_map_matching_node/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/icp_map_matching_node.dir/build.make CMakeFiles/icp_map_matching_node.dir/build
 .PHONY : icp_map_matching_node/fast
 
+#=============================================================================
+# Target rules for targets named frontier_explore_node
+
+# Build rule for target.
+frontier_explore_node: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 frontier_explore_node
+.PHONY : frontier_explore_node
+
+# fast build rule for target.
+frontier_explore_node/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/frontier_explore_node.dir/build.make CMakeFiles/frontier_explore_node.dir/build
+.PHONY : frontier_explore_node/fast
+
 src/explore_supervisor.o: src/explore_supervisor.cpp.o
 .PHONY : src/explore_supervisor.o
 
@@ -272,6 +285,30 @@ src/explore_supervisor.s: src/explore_supervisor.cpp.s
 src/explore_supervisor.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/explore_supervisor.dir/build.make CMakeFiles/explore_supervisor.dir/src/explore_supervisor.cpp.s
 .PHONY : src/explore_supervisor.cpp.s
+
+src/frontier_explore_node.o: src/frontier_explore_node.cpp.o
+.PHONY : src/frontier_explore_node.o
+
+# target to build an object file
+src/frontier_explore_node.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/frontier_explore_node.dir/build.make CMakeFiles/frontier_explore_node.dir/src/frontier_explore_node.cpp.o
+.PHONY : src/frontier_explore_node.cpp.o
+
+src/frontier_explore_node.i: src/frontier_explore_node.cpp.i
+.PHONY : src/frontier_explore_node.i
+
+# target to preprocess a source file
+src/frontier_explore_node.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/frontier_explore_node.dir/build.make CMakeFiles/frontier_explore_node.dir/src/frontier_explore_node.cpp.i
+.PHONY : src/frontier_explore_node.cpp.i
+
+src/frontier_explore_node.s: src/frontier_explore_node.cpp.s
+.PHONY : src/frontier_explore_node.s
+
+# target to generate assembly for a file
+src/frontier_explore_node.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/frontier_explore_node.dir/build.make CMakeFiles/frontier_explore_node.dir/src/frontier_explore_node.cpp.s
+.PHONY : src/frontier_explore_node.cpp.s
 
 src/icp.o: src/icp.cpp.o
 .PHONY : src/icp.o
@@ -361,12 +398,16 @@ help:
 	@echo "... multi_explore_mapping_uninstall"
 	@echo "... uninstall"
 	@echo "... explore_supervisor"
+	@echo "... frontier_explore_node"
 	@echo "... icp_lib"
 	@echo "... icp_map_matching_node"
 	@echo "... sensor_explore_node"
 	@echo "... src/explore_supervisor.o"
 	@echo "... src/explore_supervisor.i"
 	@echo "... src/explore_supervisor.s"
+	@echo "... src/frontier_explore_node.o"
+	@echo "... src/frontier_explore_node.i"
+	@echo "... src/frontier_explore_node.s"
 	@echo "... src/icp.o"
 	@echo "... src/icp.i"
 	@echo "... src/icp.s"

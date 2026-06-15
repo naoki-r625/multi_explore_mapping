@@ -1,0 +1,205 @@
+[0.000000] (-) TimerEvent: {}
+[0.000193] (multi_explore_mapping) JobQueued: {'identifier': 'multi_explore_mapping', 'dependencies': OrderedDict()}
+[0.000546] (multi_explore_mapping) JobStarted: {'identifier': 'multi_explore_mapping'}
+[0.005271] (multi_explore_mapping) JobProgress: {'identifier': 'multi_explore_mapping', 'progress': 'cmake'}
+[0.006433] (multi_explore_mapping) JobProgress: {'identifier': 'multi_explore_mapping', 'progress': 'build'}
+[0.007091] (multi_explore_mapping) Command: {'cmd': ['/usr/bin/cmake', '--build', '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping', '--', '-j16', '-l16'], 'cwd': '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('VSCODE_CWD', '/mnt/c/Users/naaki/AppData/Local/Programs/Microsoft VS Code'), ('VSCODE_ESM_ENTRYPOINT', 'vs/workbench/api/node/extensionHostProcess'), ('AI_AGENT', 'claude-code_2-1-168_agent'), ('USER', 'naoki'), ('CLAUDE_CODE_ENTRYPOINT', 'claude-vscode'), ('VSCODE_NLS_CONFIG', '{"userLocale":"ja","osLocale":"ja","resolvedLanguage":"ja","defaultMessagesFile":"/home/naoki/.vscode-server/bin/6a44c352bd24569c417e530095901b649960f9f8/out/nls.messages.json","languagePack":{"translationsConfigFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/tcf.json","messagesFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/6a44c352bd24569c417e530095901b649960f9f8/nls.messages.json","corruptMarkerFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/corrupted.info"},"locale":"ja","availableLanguages":{"*":"ja"},"_languagePackId":"37bade084f33e17c2866b890476d2e9e.ja","_languagePackSupport":true,"_translationsConfigFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/tcf.json","_cacheRoot":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja","_resolvedLanguagePackCoreLocation":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/6a44c352bd24569c417e530095901b649960f9f8","_corruptedFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/corrupted.info"}'), ('GIT_EDITOR', 'true'), ('VSCODE_WSL_EXT_LOCATION', '/mnt/c/Users/naaki/.vscode/extensions/ms-vscode-remote.remote-wsl-0.104.3'), ('VSCODE_HANDLES_UNCAUGHT_ERRORS', 'true'), ('CLAUDE_AGENT_SDK_VERSION', '0.3.168'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial/lib:/home/naoki/ros2_ws/install/multirobot_map_merge/lib:/home/naoki/ros2_ws/install/explore_lite_msgs/lib:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial/lib:/home/naoki/ros2_ws/src/install/multirobot_map_merge/lib:/home/naoki/ros2_ws/src/install/explore_lite_msgs/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/usr/share/gazebo/../../lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'update-motd'), ('HOME', '/home/naoki'), ('OLDPWD', '/home/naoki/ros2_ws/src'), ('VSCODE_RECONNECTION_GRACE_TIME', '10800000'), ('VSCODE_IPC_HOOK_CLI', '/run/user/1000/vscode-ipc-2f0cca50-0b21-4e12-b061-b01c01a9fa94.sock'), ('GAZEBO_MASTER_URI', 'http://localhost:11345'), ('ROS_PYTHON_VERSION', '3'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('WSL_DISTRO_NAME', 'Ubuntu-22.04'), ('WAYLAND_DISPLAY', 'wayland-0'), ('COLCON_PREFIX_PATH', '/home/naoki/ros2_ws/install:/home/naoki/ros2_ws/src/install'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'naoki'), ('NAME', 'DESKTOP-9NG1NAQ'), ('WSL_INTEROP', '/run/WSL/404_interop'), ('VSCODE_HANDLES_SIGPIPE', 'true'), ('PULSE_SERVER', 'unix:/mnt/wslg/PulseServer'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('GAZEBO_MODEL_PATH', '/usr/share/gazebo/../../share/gazebo-11/models:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/worlds:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/models:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/worlds:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/models:/home/naoki/.gazebo/models::/opt/ros/humble/share/turtlebot3_gazebo/models:/opt/ros/humble/share/turtlebot3_gazebo/models:/home/naoki/ros2_ws/src/aws-robomaker-small-warehouse-world/models'), ('ROS_LOCALHOST_ONLY', '0'), ('MCP_CONNECTION_NONBLOCKING', 'true'), ('OGRE_RESOURCE_PATH', '/usr/lib/x86_64-linux-gnu/OGRE-1.9.0'), ('PATH', '/home/naoki/.vscode-server/bin/6a44c352bd24569c417e530095901b649960f9f8/bin/remote-cli:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/MATLAB/R2024b/bin:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/mnt/c/Program Files/dotnet/:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/naaki/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/naaki/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/naaki/AppData/Local/PowerToys/DSCModules/:/snap/bin'), ('COREPACK_ENABLE_AUTO_PIN', '0'), ('XDG_RUNTIME_DIR', '/run/user/1000/'), ('CLAUDE_EFFORT', 'high'), ('DISPLAY', ':0'), ('NoDefaultCurrentDirectoryInExePath', '1'), ('LANG', 'en_US.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('AMENT_PREFIX_PATH', '/home/naoki/ros2_ws/install/tb3_slam_sim:/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/install/multi_explore_mapping:/home/naoki/ros2_ws/install/multirobot_map_merge:/home/naoki/ros2_ws/install/multi_slam_research:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/install/explore_lite:/home/naoki/ros2_ws/install/explore_lite_msgs:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/src/install/tb3_slam_sim:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/src/install/multi_explore_mapping:/home/naoki/ros2_ws/src/install/multirobot_map_merge:/home/naoki/ros2_ws/src/install/multi_slam_research:/home/naoki/ros2_ws/src/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/explore_lite:/home/naoki/ros2_ws/src/install/explore_lite_msgs:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('ELECTRON_RUN_AS_NODE', '1'), ('CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING', 'true'), ('CLAUDE_CODE_SESSION_ID', '8e21454e-fe32-4007-a4d7-456becd41938'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('CLAUDECODE', '1'), ('GAZEBO_RESOURCE_PATH', '/usr/share/gazebo/../../share/gazebo-11:'), ('GAZEBO_MODEL_DATABASE_URI', 'http://models.gazebosim.org'), ('PWD', '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping'), ('TURTLEBOT3_MODEL', 'burger'), ('GAZEBO_PLUGIN_PATH', '/usr/share/gazebo/../../lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/lib'), ('XDG_DATA_DIRS', '/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('CLAUDE_CODE_EXECPATH', '/home/naoki/.vscode-server/extensions/anthropic.claude-code-2.1.168-linux-x64/resources/native-binary/claude'), ('PYTHONPATH', '/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/install/multi_robot_slam/lib/python3.10/site-packages:/home/naoki/ros2_ws/install/explore_lite_msgs/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/src/install/multi_robot_slam/lib/python3.10/site-packages:/home/naoki/ros2_ws/src/install/explore_lite_msgs/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('CLAUDE_CODE_ENABLE_TASKS', '0'), ('COLCON', '1'), ('WSL2_GUI_APPS_ENABLED', '1'), ('HOSTTYPE', 'x86_64'), ('CMAKE_PREFIX_PATH', '/home/naoki/ros2_ws/install/tb3_slam_sim:/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/install/multi_explore_mapping:/home/naoki/ros2_ws/install/multirobot_map_merge:/home/naoki/ros2_ws/install/multi_slam_research:/home/naoki/ros2_ws/install/explore_lite:/home/naoki/ros2_ws/install/explore_lite_msgs:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/src/install/tb3_slam_sim:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/src/install/multi_explore_mapping:/home/naoki/ros2_ws/src/install/multirobot_map_merge:/home/naoki/ros2_ws/src/install/multi_slam_research:/home/naoki/ros2_ws/src/install/explore_lite:/home/naoki/ros2_ws/src/install/explore_lite_msgs:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble'), ('WSLENV', 'VSCODE_WSL_EXT_LOCATION/up')]), 'shell': False}
+[0.023507] (multi_explore_mapping) StdoutLine: {'line': b'-- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)\n'}
+[0.099866] (-) TimerEvent: {}
+[0.200076] (-) TimerEvent: {}
+[0.200715] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)\n'}
+[0.268456] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)\n'}
+[0.269340] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)\n'}
+[0.271763] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)\n'}
+[0.276151] (multi_explore_mapping) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c\n'}
+[0.281386] (multi_explore_mapping) StdoutLine: {'line': b'-- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp\n'}
+[0.294295] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)\n'}
+[0.295029] (multi_explore_mapping) StdoutLine: {'line': b'-- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)\n'}
+[0.300148] (-) TimerEvent: {}
+[0.400344] (-) TimerEvent: {}
+[0.500566] (-) TimerEvent: {}
+[0.600778] (-) TimerEvent: {}
+[0.700989] (-) TimerEvent: {}
+[0.801206] (-) TimerEvent: {}
+[0.901361] (-) TimerEvent: {}
+[1.001588] (-) TimerEvent: {}
+[1.101785] (-) TimerEvent: {}
+[1.202008] (-) TimerEvent: {}
+[1.302181] (-) TimerEvent: {}
+[1.402416] (-) TimerEvent: {}
+[1.502631] (-) TimerEvent: {}
+[1.602843] (-) TimerEvent: {}
+[1.703056] (-) TimerEvent: {}
+[1.803332] (-) TimerEvent: {}
+[1.903508] (-) TimerEvent: {}
+[2.003700] (-) TimerEvent: {}
+[2.103916] (-) TimerEvent: {}
+[2.204128] (-) TimerEvent: {}
+[2.304306] (-) TimerEvent: {}
+[2.404506] (-) TimerEvent: {}
+[2.504786] (-) TimerEvent: {}
+[2.605030] (-) TimerEvent: {}
+[2.698291] (multi_explore_mapping) StdoutLine: {'line': b"-- Using RMW implementation 'rmw_fastrtps_cpp' as default\n"}
+[2.705153] (-) TimerEvent: {}
+[2.719316] (multi_explore_mapping) StdoutLine: {'line': b'-- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)\n'}
+[2.730657] (multi_explore_mapping) StdoutLine: {'line': b'-- Found sensor_msgs: 4.9.1 (/opt/ros/humble/share/sensor_msgs/cmake)\n'}
+[2.736706] (multi_explore_mapping) StdoutLine: {'line': b'-- Found nav2_msgs: 1.1.20 (/opt/ros/humble/share/nav2_msgs/cmake)\n'}
+[2.753064] (multi_explore_mapping) StdoutLine: {'line': b'-- Found std_srvs: 4.9.1 (/opt/ros/humble/share/std_srvs/cmake)\n'}
+[2.758076] (multi_explore_mapping) StdoutLine: {'line': b'-- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)\n'}
+[2.768768] (multi_explore_mapping) StdoutLine: {'line': b'-- Found cv_bridge: 3.2.1 (/opt/ros/humble/share/cv_bridge/cmake)\n'}
+[2.769581] (multi_explore_mapping) StdoutLine: {'line': b'-- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)\n'}
+[2.793112] (multi_explore_mapping) StdoutLine: {'line': b'-- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)\n'}
+[2.794258] (multi_explore_mapping) StdoutLine: {'line': b'-- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)\n'}
+[2.794918] (multi_explore_mapping) StdoutLine: {'line': b'-- Ensuring Eigen3 include directory is part of orocos-kdl CMake target\n'}
+[2.800461] (multi_explore_mapping) StdoutLine: {'line': b'-- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)\n'}
+[2.805232] (-) TimerEvent: {}
+[2.852330] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'cppcheck' to perform static code analysis on C / C++ code\n"}
+[2.852677] (multi_explore_mapping) StdoutLine: {'line': b'-- Configured cppcheck include dirs: /home/naoki/ros2_ws/src/multi_explore_mapping/include\n'}
+[2.852714] (multi_explore_mapping) StdoutLine: {'line': b'-- Configured cppcheck exclude dirs and/or files: \n'}
+[2.853980] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'flake8' to check Python code syntax and style conventions\n"}
+[2.856856] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'lint_cmake' to check CMake code style\n"}
+[2.858422] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257\n"}
+[2.869371] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'uncrustify' to check C / C++ code style\n"}
+[2.869581] (multi_explore_mapping) StdoutLine: {'line': b'-- Configured uncrustify additional arguments: \n'}
+[2.870972] (multi_explore_mapping) StdoutLine: {'line': b"-- Added test 'xmllint' to check XML markup files\n"}
+[2.905293] (-) TimerEvent: {}
+[2.921906] (multi_explore_mapping) StdoutLine: {'line': b'-- Configuring done\n'}
+[2.945361] (multi_explore_mapping) StdoutLine: {'line': b'-- Generating done\n'}
+[2.951431] (multi_explore_mapping) StdoutLine: {'line': b'-- Build files have been written to: /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping\n'}
+[2.967192] (multi_explore_mapping) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target icp_lib\n'}
+[2.967910] (multi_explore_mapping) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target sensor_explore_node\n'}
+[2.967983] (multi_explore_mapping) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target explore_supervisor\n'}
+[2.970112] (multi_explore_mapping) StdoutLine: {'line': b'[ 10%] Building CXX object CMakeFiles/frontier_explore_node.dir/src/frontier_explore_node.cpp.o\n'}
+[2.972374] (multi_explore_mapping) StdoutLine: {'line': b'[ 30%] Built target icp_lib\n'}
+[2.973643] (multi_explore_mapping) StdoutLine: {'line': b'[ 50%] Built target explore_supervisor\n'}
+[2.973765] (multi_explore_mapping) StdoutLine: {'line': b'[ 60%] Building CXX object CMakeFiles/sensor_explore_node.dir/src/sensor_explore_node.cpp.o\n'}
+[2.979928] (multi_explore_mapping) StdoutLine: {'line': b'Consolidate compiler generated dependencies of target icp_map_matching_node\n'}
+[2.987757] (multi_explore_mapping) StdoutLine: {'line': b'[ 70%] Building CXX object CMakeFiles/icp_map_matching_node.dir/src/icp_map_matching_node.cpp.o\n'}
+[3.005412] (-) TimerEvent: {}
+[3.105630] (-) TimerEvent: {}
+[3.205843] (-) TimerEvent: {}
+[3.306034] (-) TimerEvent: {}
+[3.406354] (-) TimerEvent: {}
+[3.506596] (-) TimerEvent: {}
+[3.606850] (-) TimerEvent: {}
+[3.707096] (-) TimerEvent: {}
+[3.807296] (-) TimerEvent: {}
+[3.907506] (-) TimerEvent: {}
+[4.007816] (-) TimerEvent: {}
+[4.108094] (-) TimerEvent: {}
+[4.208274] (-) TimerEvent: {}
+[4.308475] (-) TimerEvent: {}
+[4.408692] (-) TimerEvent: {}
+[4.509002] (-) TimerEvent: {}
+[4.609258] (-) TimerEvent: {}
+[4.709419] (-) TimerEvent: {}
+[4.809645] (-) TimerEvent: {}
+[4.909919] (-) TimerEvent: {}
+[5.010117] (-) TimerEvent: {}
+[5.110341] (-) TimerEvent: {}
+[5.210604] (-) TimerEvent: {}
+[5.310787] (-) TimerEvent: {}
+[5.410997] (-) TimerEvent: {}
+[5.511236] (-) TimerEvent: {}
+[5.611509] (-) TimerEvent: {}
+[5.711786] (-) TimerEvent: {}
+[5.812408] (-) TimerEvent: {}
+[5.912592] (-) TimerEvent: {}
+[6.012829] (-) TimerEvent: {}
+[6.113094] (-) TimerEvent: {}
+[6.213482] (-) TimerEvent: {}
+[6.313648] (-) TimerEvent: {}
+[6.413860] (-) TimerEvent: {}
+[6.514129] (-) TimerEvent: {}
+[6.614474] (-) TimerEvent: {}
+[6.714738] (-) TimerEvent: {}
+[6.814995] (-) TimerEvent: {}
+[6.915186] (-) TimerEvent: {}
+[7.015414] (-) TimerEvent: {}
+[7.115635] (-) TimerEvent: {}
+[7.215884] (-) TimerEvent: {}
+[7.316073] (-) TimerEvent: {}
+[7.416266] (-) TimerEvent: {}
+[7.516513] (-) TimerEvent: {}
+[7.616741] (-) TimerEvent: {}
+[7.717034] (-) TimerEvent: {}
+[7.817282] (-) TimerEvent: {}
+[7.917518] (-) TimerEvent: {}
+[8.017734] (-) TimerEvent: {}
+[8.117894] (-) TimerEvent: {}
+[8.218056] (-) TimerEvent: {}
+[8.318271] (-) TimerEvent: {}
+[8.418482] (-) TimerEvent: {}
+[8.518646] (-) TimerEvent: {}
+[8.618808] (-) TimerEvent: {}
+[8.719004] (-) TimerEvent: {}
+[8.819165] (-) TimerEvent: {}
+[8.919330] (-) TimerEvent: {}
+[9.019547] (-) TimerEvent: {}
+[9.119737] (-) TimerEvent: {}
+[9.219927] (-) TimerEvent: {}
+[9.320120] (-) TimerEvent: {}
+[9.380154] (multi_explore_mapping) StdoutLine: {'line': b'[ 80%] Linking CXX executable frontier_explore_node\n'}
+[9.420252] (-) TimerEvent: {}
+[9.520477] (-) TimerEvent: {}
+[9.620714] (-) TimerEvent: {}
+[9.674508] (multi_explore_mapping) StdoutLine: {'line': b'[ 80%] Built target frontier_explore_node\n'}
+[9.720800] (-) TimerEvent: {}
+[9.821052] (-) TimerEvent: {}
+[9.910016] (multi_explore_mapping) StdoutLine: {'line': b'[ 90%] Linking CXX executable sensor_explore_node\n'}
+[9.921145] (-) TimerEvent: {}
+[10.021320] (-) TimerEvent: {}
+[10.066290] (multi_explore_mapping) StdoutLine: {'line': b'[100%] Linking CXX executable icp_map_matching_node\n'}
+[10.121434] (-) TimerEvent: {}
+[10.172227] (multi_explore_mapping) StdoutLine: {'line': b'[100%] Built target sensor_explore_node\n'}
+[10.221488] (-) TimerEvent: {}
+[10.321655] (-) TimerEvent: {}
+[10.414329] (multi_explore_mapping) StdoutLine: {'line': b'[100%] Built target icp_map_matching_node\n'}
+[10.419893] (multi_explore_mapping) CommandEnded: {'returncode': 0}
+[10.421036] (multi_explore_mapping) JobProgress: {'identifier': 'multi_explore_mapping', 'progress': 'install'}
+[10.421721] (-) TimerEvent: {}
+[10.425054] (multi_explore_mapping) Command: {'cmd': ['/usr/bin/cmake', '--install', '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping'], 'cwd': '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping', 'env': OrderedDict([('LESSOPEN', '| /usr/bin/lesspipe %s'), ('VSCODE_CWD', '/mnt/c/Users/naaki/AppData/Local/Programs/Microsoft VS Code'), ('VSCODE_ESM_ENTRYPOINT', 'vs/workbench/api/node/extensionHostProcess'), ('AI_AGENT', 'claude-code_2-1-168_agent'), ('USER', 'naoki'), ('CLAUDE_CODE_ENTRYPOINT', 'claude-vscode'), ('VSCODE_NLS_CONFIG', '{"userLocale":"ja","osLocale":"ja","resolvedLanguage":"ja","defaultMessagesFile":"/home/naoki/.vscode-server/bin/6a44c352bd24569c417e530095901b649960f9f8/out/nls.messages.json","languagePack":{"translationsConfigFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/tcf.json","messagesFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/6a44c352bd24569c417e530095901b649960f9f8/nls.messages.json","corruptMarkerFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/corrupted.info"},"locale":"ja","availableLanguages":{"*":"ja"},"_languagePackId":"37bade084f33e17c2866b890476d2e9e.ja","_languagePackSupport":true,"_translationsConfigFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/tcf.json","_cacheRoot":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja","_resolvedLanguagePackCoreLocation":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/6a44c352bd24569c417e530095901b649960f9f8","_corruptedFile":"/home/naoki/.vscode-server/data/clp/37bade084f33e17c2866b890476d2e9e.ja/corrupted.info"}'), ('GIT_EDITOR', 'true'), ('VSCODE_WSL_EXT_LOCATION', '/mnt/c/Users/naaki/.vscode/extensions/ms-vscode-remote.remote-wsl-0.104.3'), ('VSCODE_HANDLES_UNCAUGHT_ERRORS', 'true'), ('CLAUDE_AGENT_SDK_VERSION', '0.3.168'), ('SHLVL', '0'), ('LD_LIBRARY_PATH', '/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial/lib:/home/naoki/ros2_ws/install/multirobot_map_merge/lib:/home/naoki/ros2_ws/install/explore_lite_msgs/lib:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial/lib:/home/naoki/ros2_ws/src/install/multirobot_map_merge/lib:/home/naoki/ros2_ws/src/install/explore_lite_msgs/lib:/usr/lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/opt/rviz_ogre_vendor/lib:/opt/ros/humble/lib/x86_64-linux-gnu:/opt/ros/humble/lib:/usr/share/gazebo/../../lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/lib'), ('MOTD_SHOWN', 'update-motd'), ('HOME', '/home/naoki'), ('OLDPWD', '/home/naoki/ros2_ws/src'), ('VSCODE_RECONNECTION_GRACE_TIME', '10800000'), ('VSCODE_IPC_HOOK_CLI', '/run/user/1000/vscode-ipc-2f0cca50-0b21-4e12-b061-b01c01a9fa94.sock'), ('GAZEBO_MASTER_URI', 'http://localhost:11345'), ('ROS_PYTHON_VERSION', '3'), ('DBUS_SESSION_BUS_ADDRESS', 'unix:path=/run/user/1000/bus'), ('WSL_DISTRO_NAME', 'Ubuntu-22.04'), ('WAYLAND_DISPLAY', 'wayland-0'), ('COLCON_PREFIX_PATH', '/home/naoki/ros2_ws/install:/home/naoki/ros2_ws/src/install'), ('ROS_DISTRO', 'humble'), ('LOGNAME', 'naoki'), ('NAME', 'DESKTOP-9NG1NAQ'), ('WSL_INTEROP', '/run/WSL/404_interop'), ('VSCODE_HANDLES_SIGPIPE', 'true'), ('PULSE_SERVER', 'unix:/mnt/wslg/PulseServer'), ('_', '/usr/bin/colcon'), ('ROS_VERSION', '2'), ('TERM', 'xterm-256color'), ('GAZEBO_MODEL_PATH', '/usr/share/gazebo/../../share/gazebo-11/models:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/worlds:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/models:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/worlds:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world/share/aws_robomaker_small_warehouse_world/models:/home/naoki/.gazebo/models::/opt/ros/humble/share/turtlebot3_gazebo/models:/opt/ros/humble/share/turtlebot3_gazebo/models:/home/naoki/ros2_ws/src/aws-robomaker-small-warehouse-world/models'), ('ROS_LOCALHOST_ONLY', '0'), ('MCP_CONNECTION_NONBLOCKING', 'true'), ('OGRE_RESOURCE_PATH', '/usr/lib/x86_64-linux-gnu/OGRE-1.9.0'), ('PATH', '/home/naoki/.vscode-server/bin/6a44c352bd24569c417e530095901b649960f9f8/bin/remote-cli:/opt/ros/humble/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/MATLAB/R2024b/bin:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR:/mnt/c/Program Files/dotnet/:/mnt/c/Program Files/usbipd-win/:/mnt/c/Users/naaki/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/naaki/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/naaki/AppData/Local/PowerToys/DSCModules/:/snap/bin'), ('COREPACK_ENABLE_AUTO_PIN', '0'), ('XDG_RUNTIME_DIR', '/run/user/1000/'), ('CLAUDE_EFFORT', 'high'), ('DISPLAY', ':0'), ('NoDefaultCurrentDirectoryInExePath', '1'), ('LANG', 'en_US.UTF-8'), ('LS_COLORS', 'rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.zst=01;31:*.tzst=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.wim=01;31:*.swm=01;31:*.dwm=01;31:*.esd=01;31:*.jpg=01;35:*.jpeg=01;35:*.mjpg=01;35:*.mjpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.webp=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:'), ('AMENT_PREFIX_PATH', '/home/naoki/ros2_ws/install/tb3_slam_sim:/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/install/multi_explore_mapping:/home/naoki/ros2_ws/install/multirobot_map_merge:/home/naoki/ros2_ws/install/multi_slam_research:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/install/explore_lite:/home/naoki/ros2_ws/install/explore_lite_msgs:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/src/install/tb3_slam_sim:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/src/install/multi_explore_mapping:/home/naoki/ros2_ws/src/install/multirobot_map_merge:/home/naoki/ros2_ws/src/install/multi_slam_research:/home/naoki/ros2_ws/src/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/explore_lite:/home/naoki/ros2_ws/src/install/explore_lite_msgs:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world:/opt/ros/humble'), ('SHELL', '/bin/bash'), ('ELECTRON_RUN_AS_NODE', '1'), ('CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING', 'true'), ('CLAUDE_CODE_SESSION_ID', '8e21454e-fe32-4007-a4d7-456becd41938'), ('LESSCLOSE', '/usr/bin/lesspipe %s %s'), ('CLAUDECODE', '1'), ('GAZEBO_RESOURCE_PATH', '/usr/share/gazebo/../../share/gazebo-11:'), ('GAZEBO_MODEL_DATABASE_URI', 'http://models.gazebosim.org'), ('PWD', '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping'), ('TURTLEBOT3_MODEL', 'burger'), ('GAZEBO_PLUGIN_PATH', '/usr/share/gazebo/../../lib/x86_64-linux-gnu/gazebo-11/plugins:/opt/ros/humble/lib'), ('XDG_DATA_DIRS', '/usr/local/share:/usr/share:/var/lib/snapd/desktop'), ('CLAUDE_CODE_EXECPATH', '/home/naoki/.vscode-server/extensions/anthropic.claude-code-2.1.168-linux-x64/resources/native-binary/claude'), ('PYTHONPATH', '/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/install/multi_robot_slam/lib/python3.10/site-packages:/home/naoki/ros2_ws/install/explore_lite_msgs/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial/local/lib/python3.10/dist-packages:/home/naoki/ros2_ws/src/install/multi_robot_slam/lib/python3.10/site-packages:/home/naoki/ros2_ws/src/install/explore_lite_msgs/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages:/opt/ros/humble/local/lib/python3.10/dist-packages'), ('CLAUDE_CODE_ENABLE_TASKS', '0'), ('COLCON', '1'), ('WSL2_GUI_APPS_ENABLED', '1'), ('HOSTTYPE', 'x86_64'), ('CMAKE_PREFIX_PATH', '/home/naoki/ros2_ws/install/tb3_slam_sim:/home/naoki/ros2_ws/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/install/multi_explore_mapping:/home/naoki/ros2_ws/install/multirobot_map_merge:/home/naoki/ros2_ws/install/multi_slam_research:/home/naoki/ros2_ws/install/explore_lite:/home/naoki/ros2_ws/install/explore_lite_msgs:/home/naoki/ros2_ws/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/src/install/tb3_slam_sim:/home/naoki/ros2_ws/src/install/swram_robot_mapping_tutorial:/home/naoki/ros2_ws/src/install/multi_explore_mapping:/home/naoki/ros2_ws/src/install/multirobot_map_merge:/home/naoki/ros2_ws/src/install/multi_slam_research:/home/naoki/ros2_ws/src/install/explore_lite:/home/naoki/ros2_ws/src/install/explore_lite_msgs:/home/naoki/ros2_ws/src/install/aws_robomaker_small_warehouse_world:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble'), ('WSLENV', 'VSCODE_WSL_EXT_LOCATION/up')]), 'shell': False}
+[10.427411] (multi_explore_mapping) StdoutLine: {'line': b'-- Install configuration: ""\n'}
+[10.428658] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/sensor_explore_node\n'}
+[10.431092] (multi_explore_mapping) StdoutLine: {'line': b'-- Set runtime path of "/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/sensor_explore_node" to ""\n'}
+[10.432106] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/explore_supervisor\n'}
+[10.433432] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/icp_map_matching_node\n'}
+[10.435451] (multi_explore_mapping) StdoutLine: {'line': b'-- Set runtime path of "/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/icp_map_matching_node" to ""\n'}
+[10.435660] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/frontier_explore_node\n'}
+[10.437579] (multi_explore_mapping) StdoutLine: {'line': b'-- Set runtime path of "/home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/frontier_explore_node" to ""\n'}
+[10.437694] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include\n'}
+[10.438034] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include/multi_explore_mapping\n'}
+[10.438065] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include/multi_explore_mapping/icp.hpp\n'}
+[10.438086] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch\n'}
+[10.438193] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/map_matching.launch.py\n'}
+[10.438354] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/simulation_world.launch.py\n'}
+[10.438625] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/explore_supervisor.launch.py\n'}
+[10.438669] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/sensor_explore.launch.py\n'}
+[10.438693] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/frontier_explore.launch.py\n'}
+[10.438710] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/map_merge.launch.py\n'}
+[10.438726] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//worlds\n'}
+[10.438742] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//worlds/my_custom_room.world\n'}
+[10.438756] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models\n'}
+[10.438771] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model\n'}
+[10.438785] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/model.config\n'}
+[10.438804] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/meshes\n'}
+[10.438819] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/meshes/wide.dae\n'}
+[10.438833] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/model.sdf\n'}
+[10.438847] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/package_run_dependencies/multi_explore_mapping\n'}
+[10.438863] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/parent_prefix_path/multi_explore_mapping\n'}
+[10.438877] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/ament_prefix_path.sh\n'}
+[10.438891] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/ament_prefix_path.dsv\n'}
+[10.438905] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/path.sh\n'}
+[10.438920] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/path.dsv\n'}
+[10.438936] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.bash\n'}
+[10.438950] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.sh\n'}
+[10.438965] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.zsh\n'}
+[10.438981] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.dsv\n'}
+[10.438996] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.dsv\n'}
+[10.439010] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/packages/multi_explore_mapping\n'}
+[10.439024] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/cmake/multi_explore_mappingConfig.cmake\n'}
+[10.439759] (multi_explore_mapping) StdoutLine: {'line': b'-- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/cmake/multi_explore_mappingConfig-version.cmake\n'}
+[10.440237] (multi_explore_mapping) StdoutLine: {'line': b'-- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.xml\n'}
+[10.440833] (multi_explore_mapping) CommandEnded: {'returncode': 0}
+[10.451225] (multi_explore_mapping) JobEnded: {'identifier': 'multi_explore_mapping', 'rc': 0}
+[10.451831] (-) EventReactorShutdown: {}

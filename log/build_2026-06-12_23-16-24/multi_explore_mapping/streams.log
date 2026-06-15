@@ -1,0 +1,88 @@
+[0.012s] Invoking command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --build /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping -- -j16 -l16
+[0.065s] -- Found ament_cmake: 1.3.14 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.166s] -- Found rclcpp: 16.0.19 (/opt/ros/humble/share/rclcpp/cmake)
+[0.270s] -- Found rosidl_generator_c: 3.1.8 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.273s] -- Found rosidl_adapter: 3.1.8 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.281s] -- Found rosidl_generator_cpp: 3.1.8 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.292s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.305s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.340s] -- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.343s] -- Found rmw_fastrtps_cpp: 6.2.10 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+[2.830s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[2.881s] -- Found nav_msgs: 4.9.1 (/opt/ros/humble/share/nav_msgs/cmake)
+[2.906s] -- Found sensor_msgs: 4.9.1 (/opt/ros/humble/share/sensor_msgs/cmake)
+[2.921s] -- Found nav2_msgs: 1.1.20 (/opt/ros/humble/share/nav2_msgs/cmake)
+[2.960s] -- Found std_srvs: 4.9.1 (/opt/ros/humble/share/std_srvs/cmake)
+[2.971s] -- Found visualization_msgs: 4.9.1 (/opt/ros/humble/share/visualization_msgs/cmake)
+[2.991s] -- Found cv_bridge: 3.2.1 (/opt/ros/humble/share/cv_bridge/cmake)
+[2.994s] -- Found tf2_ros: 0.25.20 (/opt/ros/humble/share/tf2_ros/cmake)
+[3.049s] -- Found tf2_geometry_msgs: 0.25.20 (/opt/ros/humble/share/tf2_geometry_msgs/cmake)
+[3.053s] -- Found eigen3_cmake_module: 0.1.1 (/opt/ros/humble/share/eigen3_cmake_module/cmake)
+[3.054s] -- Ensuring Eigen3 include directory is part of orocos-kdl CMake target
+[3.060s] -- Found ament_lint_auto: 0.12.15 (/opt/ros/humble/share/ament_lint_auto/cmake)
+[3.270s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[3.270s] -- Configured cppcheck include dirs: /home/naoki/ros2_ws/src/multi_explore_mapping/include
+[3.270s] -- Configured cppcheck exclude dirs and/or files: 
+[3.272s] -- Added test 'flake8' to check Python code syntax and style conventions
+[3.276s] -- Added test 'lint_cmake' to check CMake code style
+[3.277s] -- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+[3.289s] -- Added test 'uncrustify' to check C / C++ code style
+[3.289s] -- Configured uncrustify additional arguments: 
+[3.291s] -- Added test 'xmllint' to check XML markup files
+[3.292s] -- Configuring done
+[3.319s] -- Generating done
+[3.325s] -- Build files have been written to: /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping
+[3.345s] Consolidate compiler generated dependencies of target icp_lib
+[3.346s] Consolidate compiler generated dependencies of target explore_supervisor
+[3.346s] Consolidate compiler generated dependencies of target sensor_explore_node
+[3.347s] Consolidate compiler generated dependencies of target frontier_explore_node
+[3.352s] [ 20%] Built target icp_lib
+[3.352s] [ 40%] Built target sensor_explore_node
+[3.352s] [ 60%] Built target explore_supervisor
+[3.353s] [ 80%] Built target frontier_explore_node
+[3.359s] Consolidate compiler generated dependencies of target icp_map_matching_node
+[3.366s] [100%] Built target icp_map_matching_node
+[3.371s] Invoked command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --build /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping -- -j16 -l16
+[3.375s] Invoking command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --install /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping
+[3.378s] -- Install configuration: ""
+[3.379s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/sensor_explore_node
+[3.379s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/explore_supervisor
+[3.379s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/icp_map_matching_node
+[3.380s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/lib/multi_explore_mapping/frontier_explore_node
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include/multi_explore_mapping
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/include/multi_explore_mapping/icp.hpp
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/map_matching.launch.py
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/simulation_world.launch.py
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/explore_supervisor.launch.py
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/sensor_explore.launch.py
+[3.381s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/frontier_explore.launch.py
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//launch/map_merge.launch.py
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//worlds
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//worlds/my_custom_room.world
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model
+[3.381s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/model.config
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/meshes
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/meshes/wide.dae
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//models/my_custom_model/model.sdf
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//config
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//config/nav2_robot1_params.yaml
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping//config/nav2_robot2_params.yaml
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/package_run_dependencies/multi_explore_mapping
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/parent_prefix_path/multi_explore_mapping
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/ament_prefix_path.sh
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/ament_prefix_path.dsv
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/path.sh
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/environment/path.dsv
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.bash
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.sh
+[3.382s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.zsh
+[3.382s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/local_setup.dsv
+[3.383s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.dsv
+[3.383s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/ament_index/resource_index/packages/multi_explore_mapping
+[3.383s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/cmake/multi_explore_mappingConfig.cmake
+[3.383s] -- Up-to-date: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/cmake/multi_explore_mappingConfig-version.cmake
+[3.383s] -- Installing: /home/naoki/ros2_ws/src/multi_explore_mapping/install/multi_explore_mapping/share/multi_explore_mapping/package.xml
+[3.384s] Invoked command in '/home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/naoki/ros2_ws/install/multi_robot_slam:/home/naoki/ros2_ws/src/install/multi_robot_slam:/opt/ros/humble /usr/bin/cmake --install /home/naoki/ros2_ws/src/multi_explore_mapping/build/multi_explore_mapping

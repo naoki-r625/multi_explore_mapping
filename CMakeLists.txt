@@ -17,6 +17,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 # ✅ ICP 実装に必要な依存を追加
 find_package(Eigen3 REQUIRED)
@@ -80,11 +81,24 @@ ament_target_dependencies(icp_map_matching_node
   cv_bridge
 )
 
+add_executable(frontier_explore_node src/frontier_explore_node.cpp)
+ament_target_dependencies(frontier_explore_node
+  rclcpp
+  rclcpp_action
+  nav_msgs
+  geometry_msgs
+  nav2_msgs
+  tf2_ros
+  tf2_geometry_msgs
+  visualization_msgs
+  )
+
 # ==================== Install ====================
 install(TARGETS
   sensor_explore_node
   explore_supervisor
   icp_map_matching_node
+  frontier_explore_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -97,6 +111,7 @@ install(DIRECTORY
   launch
   worlds
   models
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 

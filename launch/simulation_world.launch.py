@@ -38,8 +38,8 @@ def launch_setup(context, *args, **kwargs):
             'worlds', 'no_roof_small_warehouse', 'no_roof_small_warehouse.world'
         )
         robots = [
-            ('robot_1', 'burger', 0.0, 6.0, 0.0),
-            ('robot_2', 'burger', 0.0, -6.0, 0.0),
+            ('robot_1', 'burger', 0.0, 2.0, 0.0),
+            ('robot_2', 'burger', 0.0, -2.0, 0.0),
         ]
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)
@@ -187,8 +187,8 @@ def launch_setup(context, *args, **kwargs):
                 # 引数を8個のスタイル（x, y, z, yaw, pitch, roll, frame_id, child_frame_id）に変更
                 # yaw（Z軸回転）をそのまま渡せるため、初期の向き（yaw）も完璧に反映されます
                 arguments=[
-                    str(x), str(y), '0.0',  # X, Y, Z
-                    str(yaw), '0.0', '0.0', # Yaw, Pitch, Roll
+                    '0.0', '0.0', '0.0',  # X, Y, Z
+                    '0.0', '0.0', '0.0', # Yaw, Pitch, Roll
                     'map', f'{ns}/map'      # 親フレーム, 子フレーム
                 ],
             )
