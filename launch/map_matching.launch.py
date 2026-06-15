@@ -14,10 +14,10 @@ def generate_launch_description():
             # ロボット初期位置 (simulation_world.launch.py の spawn 位置と一致させる)
             # robot_1: (3, 0), robot_2: (-3, 0)
             'robot_1_init_x':   0.0,
-            'robot_1_init_y':   2.0,
+            'robot_1_init_y':   0.0,
             'robot_1_init_yaw': 0.0,
             'robot_2_init_x':   0.0,
-            'robot_2_init_y':   -2.0,
+            'robot_2_init_y':   0.0,
             'robot_2_init_yaw': 0.0,
             # ICP パラメータ
             'max_icp_iterations':        50,

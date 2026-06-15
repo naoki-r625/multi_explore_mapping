@@ -39,7 +39,7 @@ def launch_setup(context, *args, **kwargs):
         )
         robots = [
             ('robot_1', 'burger', 0.0, 2.0, 0.0),
-            ('robot_2', 'burger', 0.0, -2.0, 0.0),
+            #('robot_2', 'burger', 0.0, -2.0, 0.0),
         ]
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)

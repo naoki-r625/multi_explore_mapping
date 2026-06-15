@@ -26,6 +26,7 @@ public:
       tf_buffer_(this->get_clock()),
       tf_listener_(tf_buffer_)
     {
+        // パラメータ宣言と初期化
         this->declare_parameter<std::string>("robot_base_frame", "base_link");
         this->declare_parameter<std::string>("global_frame", "map");
         this->declare_parameter<std::string>("map_topic", "/map");
@@ -50,6 +51,7 @@ public:
         blacklist_clear_sec_ = this->get_parameter("blacklist_clear_sec").as_double();
         std::string map_topic = this->get_parameter("map_topic").as_string();
 
+        // 統合コストマップをサブスクライブ
         map_subscription_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
             map_topic,
             rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
@@ -61,8 +63,10 @@ public:
                 "frontiers", 10);
         }
 
+        // Nav2 アクションクライアントの生成
         nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
 
+        // メイン制御ループタイマー
         timer_ = this->create_wall_timer(
             std::chrono::duration<double>(1.0 / planner_frequency_),
             std::bind(&FrontierExplorerNode::exploration_loop, this)
@@ -110,7 +114,7 @@ private:
     geometry_msgs::msg::PoseStamped current_goal_;
     std::shared_ptr<GoalHandleNav> current_goal_handle_;
 
-    // 到達失敗したフロンティアの重心をブラックリスト化
+    // 到達失敗したフロンティアのブラックリスト
     std::vector<std::pair<double,double>> blacklist_;
 
     tf2_ros::Buffer tf_buffer_;
@@ -127,8 +131,7 @@ private:
     }
 
     // ----------------------------------------------------------------
-    // フロンティア検出 (8近傍)
-    // 8近傍を使うと開けた場所で散らばったフロンティアセルを大きなクラスタにまとめやすい
+    // フロンティアセル検出 (8近傍・有符号int8_t対応版)
     // ----------------------------------------------------------------
     std::vector<Cell> detect_frontier_cells(const nav_msgs::msg::OccupancyGrid &map)
     {
@@ -142,14 +145,21 @@ private:
 
         for (int y = 1; y < H - 1; y++) {
             for (int x = 1; x < W - 1; x++) {
-                int8_t val = map.data[y * W + x];
-                if (val < 0 || val > 25) continue;  // free セルのみ
+                int8_t raw_val = map.data[y * W + x];
+        
+                // コストマップ仕様: -1は未知(NO_INFORMATION), 100以上は障害物または危険領域
+                if (raw_val == -1 || raw_val >= 100) continue; 
 
                 bool has_unknown = false;
                 for (int d = 0; d < 8; d++) {
                     int nx = x + dx[d], ny = y + dy[d];
                     if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-                    if (map.data[ny * W + nx] == -1) { has_unknown = true; break; }
+            
+                    // 隣接セルに「未知（-1）」があるセルを境界線（フロンティア）とする
+                    if (map.data[ny * W + nx] == -1) { 
+                        has_unknown = true; 
+                        break; 
+                    }
                 }
                 if (has_unknown) frontier_cells.push_back({x, y});
             }
@@ -239,7 +249,7 @@ private:
 
             double dist = std::max(0.01, std::hypot(f.centroid_x - robot_x,
                                                      f.centroid_y - robot_y));
-            // score: 大きい未探索エリアを遠くても優先、近い小さなフロンティアより大局的探索を選ぶ
+            // スコア評価式：ゲイン（未探索面積）とポテンシャル（距離ペナルティ）
             f.score = gain_scale_ * f.size - potential_scale_ * dist;
 
             if (f.score > best_score) {
@@ -261,7 +271,7 @@ private:
             return true;
         } catch (const tf2::TransformException &e) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                "TF lookup failed: %s", e.what());
+                "TF lookup failed: %s -> %s | %s", global_frame_.c_str(), robot_base_frame_.c_str(), e.what());
             return false;
         }
     }
@@ -285,10 +295,10 @@ private:
         opts.goal_response_callback =
             [this](const GoalHandleNav::SharedPtr &gh) {
                 if (!gh) {
-                    RCLCPP_WARN(this->get_logger(), "Goal rejected, will retry");
+                    RCLCPP_WARN(this->get_logger(), "Goal rejected by Nav2, will retry");
                     state_ = State::IDLE;
                 } else {
-                    RCLCPP_INFO(this->get_logger(), "Goal accepted");
+                    RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2");
                 }
             };
 
@@ -296,7 +306,7 @@ private:
             [this](const GoalHandleNav::WrappedResult &res) {
                 switch (res.code) {
                     case rclcpp_action::ResultCode::SUCCEEDED:
-                        RCLCPP_INFO(this->get_logger(), "Reached frontier!");
+                        RCLCPP_INFO(this->get_logger(), "Reached target frontier!");
                         break;
                     case rclcpp_action::ResultCode::ABORTED:
                         RCLCPP_WARN(this->get_logger(),
@@ -319,8 +329,7 @@ private:
         state_ = State::MOVING;
         last_progress_time_ = this->now();
 
-        RCLCPP_INFO(this->get_logger(),
-            "Navigating to frontier (%.2f, %.2f)", x, y);
+        RCLCPP_INFO(this->get_logger(), "Navigating to frontier (%.2f, %.2f)", x, y);
     }
 
     void cancel_current_goal() {
@@ -338,7 +347,7 @@ private:
         visualization_msgs::msg::MarkerArray arr;
         int id = 0;
 
-        // ブラックリスト位置を赤マーカーで表示
+        // ブラックリスト（赤）
         for (const auto &[bx, by] : blacklist_) {
             visualization_msgs::msg::Marker m;
             m.header.frame_id = global_frame_;
@@ -354,6 +363,7 @@ private:
             arr.markers.push_back(m);
         }
 
+        // フロンティア一覧
         for (const auto &f : frontiers) {
             bool is_valid    = (f.size >= min_frontier_size_);
             bool is_selected = (selected && &f == selected);
@@ -369,18 +379,17 @@ private:
             m.pose.position.y = f.centroid_y;
             m.pose.position.z = 0.1;
             m.pose.orientation.w = 1.0;
-            m.scale.x = m.scale.y = m.scale.z =
-                std::max(0.2, std::min(1.0, f.size * 0.1));
+            m.scale.x = m.scale.y = m.scale.z = std::max(0.2, std::min(1.0, f.size * 0.1));
             m.lifetime = rclcpp::Duration::from_seconds(2.0 / planner_frequency_);
 
             if (is_bl) {
                 m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.5;
             } else if (is_selected) {
-                m.color.r = 0.0; m.color.g = 1.0; m.color.b = 0.0; m.color.a = 1.0;
+                m.color.r = 0.0; m.color.g = 1.0; m.color.b = 0.0; m.color.a = 1.0; // ターゲット（緑）
             } else if (is_valid) {
-                m.color.r = 0.0; m.color.g = 0.5; m.color.b = 1.0; m.color.a = 0.8;
+                m.color.r = 0.0; m.color.g = 0.5; m.color.b = 1.0; m.color.a = 0.8; // 有効（青）
             } else {
-                m.color.r = 0.5; m.color.g = 0.5; m.color.b = 0.5; m.color.a = 0.3;
+                m.color.r = 0.5; m.color.g = 0.5; m.color.b = 0.5; m.color.a = 0.3; // サイズ未満（灰）
             }
             arr.markers.push_back(m);
         }
@@ -391,8 +400,11 @@ private:
         frontier_publisher_->publish(arr);
     }
 
+    // ----------------------------------------------------------------
+    // メイン制御ループ
+    // ----------------------------------------------------------------
     void exploration_loop() {
-        // ブラックリストを定期クリア (時間が経てば以前に失敗した場所も再試行)
+        // ブラックリストの定期クリア処理
         if ((this->now() - last_blacklist_clear_).seconds() > blacklist_clear_sec_) {
             if (!blacklist_.empty()) {
                 RCLCPP_INFO(this->get_logger(), "Clearing blacklist (%zu entries)", blacklist_.size());
@@ -402,8 +414,7 @@ private:
         }
 
         if (!current_map_) {
-            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                "Waiting for map...");
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Waiting for map...");
             return;
         }
 
@@ -416,32 +427,60 @@ private:
         double robot_x, robot_y;
         if (!get_robot_pose(robot_x, robot_y)) return;
 
+        // 進捗タイムアウト監視
         if (state_ == State::MOVING) {
             double elapsed = (this->now() - last_progress_time_).seconds();
             if (elapsed > progress_timeout_) {
-                RCLCPP_WARN(this->get_logger(),
-                    "Progress timeout (%.1fs) → cancel and replan", elapsed);
-                blacklist_.emplace_back(current_goal_.pose.position.x,
-                                        current_goal_.pose.position.y);
+                RCLCPP_WARN(this->get_logger(), "Progress timeout (%.1fs) → cancel and replan", elapsed);
+                blacklist_.emplace_back(current_goal_.pose.position.x, current_goal_.pose.position.y);
                 cancel_current_goal();
             }
             if (!map_updated_) return;
         }
         map_updated_ = false;
 
+        // フロンティア検出とクラスタリング
         auto frontier_cells = detect_frontier_cells(*current_map_);
 
         if (frontier_cells.empty()) {
             RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
-                "No frontier cells in merged map. Waiting for map update...");
+                "No frontier cells in costmap. Map exploration might be completed.");
             return;
         }
 
         auto frontiers = cluster_frontiers(frontier_cells, *current_map_);
+
+        // ─── 協調・チャタリング防止ロジック ───
+        if (state_ == State::MOVING) {
+            double gx = current_goal_.pose.position.x;
+            double gy = current_goal_.pose.position.y;
+
+            // 現在目指しているゴールの近傍（1.0m以内）にまだ未探索フロンティアが存在するか
+            bool current_frontier_still_exists = false;
+            for (const auto &f : frontiers) {
+                if (std::hypot(f.centroid_x - gx, f.centroid_y - gy) < 1.0) {
+                    current_frontier_still_exists = true;
+                    break;
+                }
+            }
+
+            // フロンティアが残っているなら、余計な再計画をせずに直進を維持
+            if (current_frontier_still_exists) {
+                Frontier *best = select_best_frontier(frontiers, robot_x, robot_y);
+                publish_frontiers(frontiers, best);
+                return; 
+            } else {
+                // 他のロボットに開拓されて消滅、あるいは障害物で埋まった場合は即座に次へ切り替え
+                RCLCPP_INFO(this->get_logger(), "Current target vanished or cleared by other robot. Replanning...");
+                cancel_current_goal();
+            }
+        }
+        // ──────────────────────────────────────
+
+        // ベストなフロンティアを選択
         Frontier *best = select_best_frontier(frontiers, robot_x, robot_y);
 
         if (!best) {
-            // 有効フロンティアが全てブラックリスト内 or min_size 未満
             long valid_count = std::count_if(frontiers.begin(), frontiers.end(),
                 [this](const Frontier &f){ return f.size >= min_frontier_size_; });
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
@@ -450,20 +489,15 @@ private:
             return;
         }
 
+        // Rviz用可視化マーカーの配信
         publish_frontiers(frontiers, best);
-
-        if (state_ == State::MOVING) {
-            double dx = best->centroid_x - current_goal_.pose.position.x;
-            double dy = best->centroid_y - current_goal_.pose.position.y;
-            if (std::hypot(dx, dy) < 0.5) return;
-            cancel_current_goal();
-        }
 
         RCLCPP_INFO(this->get_logger(),
             "Frontier: (%.2f, %.2f) size=%.2fm score=%.2f | clusters=%zu blacklist=%zu",
             best->centroid_x, best->centroid_y, best->size, best->score,
             frontiers.size(), blacklist_.size());
 
+        // 新しい目標を送信
         send_nav_goal(best->centroid_x, best->centroid_y);
     }
 };

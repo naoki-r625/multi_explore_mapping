@@ -2,7 +2,7 @@ robot_2/bt_navigator:
   ros__parameters:
     use_sim_time: True
     global_frame: map
-    robot_base_frame: robot_1/base_footprint
+    robot_base_frame: robot_2/base_footprint
     odom_topic: /robot_2/odom
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -76,8 +76,8 @@ robot_2/controller_server:
       movement_time_allowance: 10.0
     goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.10
+      yaw_goal_tolerance: 0.10
       stateful: True
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
