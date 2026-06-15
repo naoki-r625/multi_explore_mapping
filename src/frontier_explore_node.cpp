@@ -236,10 +236,7 @@ private:
         return false;
     }
 
-    Frontier* select_best_frontier(
-        std::vector<Frontier> &frontiers,
-        double robot_x, double robot_y)
-    {
+    Frontier* select_best_frontier(std::vector<Frontier> &frontiers, double robot_x, double robot_y) {
         Frontier *best = nullptr;
         double best_score = -std::numeric_limits<double>::infinity();
 
@@ -247,10 +244,16 @@ private:
             if (f.size < min_frontier_size_) continue;
             if (is_blacklisted(f.centroid_x, f.centroid_y)) continue;
 
-            double dist = std::max(0.01, std::hypot(f.centroid_x - robot_x,
-                                                     f.centroid_y - robot_y));
-            // スコア評価式：ゲイン（未探索面積）とポテンシャル（距離ペナルティ）
-            f.score = gain_scale_ * f.size - potential_scale_ * dist;
+            // 距離の計算（安全のため最小値を0.1mに制限）
+            double dist = std::max(0.1, std::hypot(f.centroid_x - robot_x, f.centroid_y - robot_y));
+            
+            // ─── 【修正案】新しいスコア評価式 ───
+            // 距離が遠くなるほど、potential_scaleによるペナルティが「2乗」で効くようになります。
+            // これにより、目の前にある小さなフロンティア(sizeが小さくてもdistが極小)が最優先されます。
+            f.score = (gain_scale_ * f.size) - (potential_scale_ * dist * dist);
+
+            // 【別案：より近くを徹底したい場合】分母に距離をかけるアプローチ
+            // f.score = (gain_scale_ * f.size) / dist; 
 
             if (f.score > best_score) {
                 best_score = f.score;
