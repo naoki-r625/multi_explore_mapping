@@ -24,6 +24,11 @@ public:
         declare_parameter("max_correspondence_distance",  0.5);   // メートル
         declare_parameter("overlap_filter_margin",        2.0);   // メートル
         declare_parameter("max_feature_points",           1500);
+        // マップが大きくなるほど Canny/書き込みコストが増えるため、
+        // 処理前にこの倍率でグリッドを縮小する (1=無効)。解像度は resolution*factor になる。
+        declare_parameter("map_downsample_factor",        2);
+        // 統合処理の目標周期。処理が長引いても詰まらないよう、毎回 処理後に再スケジュールする。
+        declare_parameter("target_period_sec",            2.0);
 
         map_pub_ = create_publisher<OccupancyGrid>(
             "/map", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local());
@@ -44,15 +49,66 @@ public:
                 maps_["robot_2"] = std::move(msg);
             });
 
-        timer_ = create_wall_timer(
-            std::chrono::seconds(2),
-            [this]() { icp_matching(); });
+        schedule_next_cycle(0.5);  // 起動直後は最初のマップ到着を少し待つ
 
         RCLCPP_INFO(get_logger(), "ICP Map Matching Node started");
     }
 
 private:
     struct Pose2D { float x, y, yaw; };
+
+    // 処理後に経過時間を見て次回待機時間を決める one-shot タイマー。
+    // 固定周期の wall timer だと処理が周期を超えた際に呼び出しが
+    // 詰まったりバーストしたりするため、自己再スケジュール方式にする。
+    void schedule_next_cycle(double delay_sec) {
+        timer_ = create_wall_timer(
+            std::chrono::duration<double>(std::max(0.05, delay_sec)),
+            [this]() { run_cycle(); });
+    }
+
+    void run_cycle() {
+        timer_->cancel();
+        const auto t0 = std::chrono::steady_clock::now();
+        icp_matching();
+        const double elapsed =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        const double period = get_parameter("target_period_sec").as_double();
+
+        RCLCPP_INFO(get_logger(), "ICP cycle: %.3fs (target %.2fs)%s",
+            elapsed, period, (elapsed > period) ? " — falling behind, running back-to-back" : "");
+
+        schedule_next_cycle(period - elapsed);
+    }
+
+    // OccupancyGrid を factor 倍粗いグリッドに縮小する。
+    // 占有(100) > 空き(0) > 未知(-1) の優先度でブロックを縮約し、
+    // 縮小によって障害物セルが消えてしまわないようにする。
+    OccupancyGrid::SharedPtr downsample(const OccupancyGrid::SharedPtr& src, int factor) {
+        if (factor <= 1) return src;
+
+        auto dst = std::make_shared<OccupancyGrid>();
+        dst->header = src->header;
+        dst->info   = src->info;
+        dst->info.resolution = src->info.resolution * factor;
+
+        const int W  = (int)src->info.width;
+        const int H  = (int)src->info.height;
+        const int dW = (W + factor - 1) / factor;
+        const int dH = (H + factor - 1) / factor;
+        dst->info.width  = (uint32_t)dW;
+        dst->info.height = (uint32_t)dH;
+        dst->data.assign((size_t)dW * dH, -1);
+
+        for (int row = 0; row < H; ++row) {
+            const int drow = row / factor;
+            for (int col = 0; col < W; ++col) {
+                const int8_t v = src->data[row * W + col];
+                const int didx = drow * dW + (col / factor);
+                if (dst->data[didx] < v) dst->data[didx] = v;
+            }
+        }
+        return dst;
+    }
 
     // OccupancyGrid のエッジ点を世界座標(メートル)で抽出
     // world = R(yaw) * local + (init_x, init_y)
@@ -253,6 +309,12 @@ private:
             map1 = maps_["robot_1"];
             map2 = maps_["robot_2"];
         }
+
+        // 特徴抽出・マージの両方をこの縮小グリッドで行うことで
+        // H*W に比例するコスト (Canny / 書き込み) を factor^2 で削減する
+        const int downsample_factor = (int)get_parameter("map_downsample_factor").as_int();
+        map1 = downsample(map1, downsample_factor);
+        map2 = downsample(map2, downsample_factor);
 
         const Pose2D init1{
             (float)get_parameter("robot_1_init_x").as_double(),

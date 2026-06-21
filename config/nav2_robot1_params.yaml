@@ -176,7 +176,7 @@ robot_1/global_costmap/global_costmap:
     static_layer:
       plugin: "nav2_costmap_2d::StaticLayer"
       map_subscribe_transient_local: True
-      map_topic: /robot_1/map  # 【重要】ここを統合の/mapではなく自身の/robot_1/mapにするか、ICPノードが吐き出す統合後のトピックパスにする
+      map_topic: /map  # 【重要】ここを統合の/mapではなく自身の/robot_1/mapにするか、ICPノードが吐き出す統合後のトピックパスにする
     obstacle_layer:
       plugin: "nav2_costmap_2d::ObstacleLayer"
       enabled: True

@@ -23,6 +23,9 @@ def generate_launch_description():
             'max_icp_iterations':        50,
             'icp_convergence_threshold': 0.05,  # メートル単位
             'max_feature_points':        2000,
+            # 性能パラメータ: マップ縮小倍率と統合周期
+            'map_downsample_factor':     2,    # 解像度を2倍粗くしてCanny/書き込みコストを1/4に
+            'target_period_sec':         2.0,  # 処理が長引いても詰まらないよう自己再スケジュール
         }]
     )
 
