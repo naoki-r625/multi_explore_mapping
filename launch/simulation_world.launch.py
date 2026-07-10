@@ -29,7 +29,7 @@ def launch_setup(context, *args, **kwargs):
         #
         robots = [
             ('robot_1', 'burger', 3.0, 0.0 ,0.0),
-            ('robot_2', 'burger', -3.0, 0.0, 0.0),
+            #('robot_2', 'burger', -3.0, 0.0, 0.0),
         ]
     else:
         #
@@ -39,7 +39,7 @@ def launch_setup(context, *args, **kwargs):
         )
         robots = [
             ('robot_1', 'burger', 0.0, 2.0, 0.0),
-            ('robot_2', 'burger', 0.0, -2.0, 0.0),
+            #('robot_2', 'burger', 0.0, -2.0, 0.0),
         ]
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)
@@ -196,7 +196,7 @@ def launch_setup(context, *args, **kwargs):
 
     # 10秒待ってから一斉起動
     delayed_robots = TimerAction(
-        period=3.0,
+        period=5.0,
         actions=robot_nodes
     )
 
