@@ -54,7 +54,9 @@ ament_target_dependencies(sensor_explore_node
   geometry_msgs
   sensor_msgs
   nav_msgs
+  visualization_msgs
 )
+# geometry_msgs already covers PoseArray; no extra package needed.
 target_include_directories(sensor_explore_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )

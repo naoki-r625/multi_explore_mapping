@@ -20,11 +20,12 @@ def generate_launch_description():
         # VFH 障害物回避 (論文A 3.1節)
         'vfh_threshold':         1.5,   # セクタ密度の閾値
         'valley_min_deg':       30.0,   # 通過可能な谷の最小幅 [deg]
-        'robot_radius':         0.089,  # TurtleBot3 Burger 半幅 [m] (横幅178mm)
-        'emergency_dist':        0.1,   # ロボット端からの緊急停止クリアランス [m]
+        'robot_radius':         0.13,  # TurtleBot3 Burger 半幅 [m] (横幅178mm)
+        'emergency_dist':        0.22,   # ロボット端からの緊急停止クリアランス [m]
         # 重複探査防止 (論文A 3.3節 + 3.5.1節)
         'dup_radius':            1.5,   # 重複判定半径 [m]
         'dup_time':            200.0,   # 重複判定時間窓 [s]
+        'odom_frame': 'map',   # SLAM が map→odom TF を配信している場合
     }
 
     return LaunchDescription([
