@@ -39,7 +39,7 @@ def launch_setup(context, *args, **kwargs):
         )
         robots = [
             ('robot_1', 'burger', 0.0, 2.0, 0.0),
-            #('robot_2', 'burger', 0.0, -2.0, 0.0),
+            ('robot_2', 'burger', 0.0, -2.0, 0.0),
         ]
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)
@@ -143,12 +143,12 @@ def launch_setup(context, *args, **kwargs):
                     'map_update_interval': 1.0,
 
                     # 1. スキャンマッチングの厳格化（誤認識を防ぐ）
-                    'minimum_note_score': 0.25,      # 0.55から引き下げ。ループ候補を厳しく弾きすぎないように　調整マッチングスコア閾値
+                    'minimum_note_score': 0.55,      # 0.55から引き下げ。ループ候補を厳しく弾きすぎないように　調整マッチングスコア閾値
                     'link_match_minimum_response_coarse': 0.1, #粗探索における相関値閾値
                     'link_scan_maximum_distance': 1.5, # 近くの壁とのマッチング精度向上 最大対応点探索距離
 
                     # 2. ループ検索範囲の最適化（AWS Warehouseのスケールに合わせる）
-                    'loop_search_maximum_distance': 5.0,  # 4.0から少し拡大（オドメトリのズレをカバー）自己位置の不確かさの境界
+                    'loop_search_maximum_distance': 4.0,  # 4.0から少し拡大（オドメトリのズレをカバー）自己位置の不確かさの境界
                     'loop_match_minimum_chain_size': 5,    # 3から5へ。誤ったループ（誤マッチング）による地図の崩壊を防ぐ 時間的一貫性の検証閾値
                     'loop_search_space_dimension': 8.0,    # 探索サブマップのサイズ（8.0でOK） ローカルサブマップ（局所地図）の空間サイズ
                     'loop_match_maximum_variance_coarse': 0.4, #共分散・分散の許容閾値

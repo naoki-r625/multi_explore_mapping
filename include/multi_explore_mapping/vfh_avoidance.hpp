@@ -40,7 +40,8 @@ public:
         double vfh_threshold,
         double valley_min_deg,
         double emergency_dist,
-        double angular_speed);
+        double angular_speed,
+        double robot_radius = 0.0);
 
     // Run the full VFH pipeline on the given cluster list.
     AvoidResult compute(const std::vector<cluster::Cluster>& clusters);
@@ -49,7 +50,7 @@ public:
     const std::vector<double>& histogram() const { return hist_; }
 
 private:
-    double safe_, vfh_t_, v_min_, emerg_d_, ang_;
+    double safe_, vfh_t_, v_min_, emerg_d_, ang_, robot_r_;
     std::vector<double> hist_;
 
     void   build_histogram(const std::vector<cluster::Cluster>& clusters);

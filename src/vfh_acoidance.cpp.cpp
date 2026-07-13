@@ -4,12 +4,13 @@
 namespace avoidance {
 
 VFH::VFH(double safe_dist, double vfh_threshold, double valley_min_deg,
-         double emergency_dist, double angular_speed)
+         double emergency_dist, double angular_speed, double robot_radius)
     : safe_(safe_dist),
       vfh_t_(vfh_threshold),
       v_min_(valley_min_deg * M_PI / 180.0),
       emerg_d_(emergency_dist),
       ang_(angular_speed),
+      robot_r_(robot_radius),
       hist_(N, 0.0)
 {}
 
@@ -27,12 +28,17 @@ void VFH::build_histogram(const std::vector<cluster::Cluster>& clusters) {
     for (const auto& c : clusters) {
         if (c.min_dist < 0.01) continue;
 
-        const double half_ang = std::atan2(c.radius + 0.05, c.min_dist);
+        // Inflate each cluster's angular extent by the robot radius so that the
+        // "forbidden" arc in the histogram covers all headings that would bring
+        // the robot body within the cluster, not just the LiDAR center point.
+        // This is the standard VFH robot-footprint correction (Ulrich & Borenstein 1998).
+        const double half_ang = std::atan2(c.radius + robot_r_, c.min_dist);
         const double a_lo = c.angle - half_ang;
         const double a_hi = c.angle + half_ang;
 
-        // Weight: 1.0 at origin, 0.0 at 2× safe_distance
-        const double w = std::max(0.0, (safe_ * 2.0 - c.min_dist) / (safe_ * 2.0));
+        // Proximity weight based on clearance between robot body and obstacle.
+        const double eff_dist = std::max(0.01, c.min_dist - robot_r_);
+        const double w = std::max(0.0, (safe_ * 2.0 - eff_dist) / (safe_ * 2.0));
         if (w <= 0.0) continue;
 
         const int s_lo = static_cast<int>((a_lo + M_PI) / step);
@@ -57,8 +63,9 @@ double VFH::check_emergency(const std::vector<cluster::Cluster>& clusters) const
             best_angle = c.angle;
         }
     }
-    return (closest < emerg_d_) ? best_angle
-                                 : std::numeric_limits<double>::quiet_NaN();
+    // Emergency triggers when the robot body edge (not LiDAR center) is within emerg_d_.
+    return (closest - robot_r_ < emerg_d_) ? best_angle
+                                            : std::numeric_limits<double>::quiet_NaN();
 }
 
 // --------------------------------------------------------------------------

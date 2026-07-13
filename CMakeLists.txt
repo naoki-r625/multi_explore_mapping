@@ -44,12 +44,19 @@ target_link_libraries(icp_lib
 # ==================== Build C++ Executables ====================
 
 # 1. Sensor Explore Node
-add_executable(sensor_explore_node src/sensor_explore_node.cpp)
+add_executable(sensor_explore_node
+  src/sensor_explore_node.cpp
+  src/sensor_processor.cpp
+  src/vfh_acoidance.cpp.cpp
+)
 ament_target_dependencies(sensor_explore_node
   rclcpp
   geometry_msgs
   sensor_msgs
   nav_msgs
+)
+target_include_directories(sensor_explore_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
 # 2. Explore Supervisor

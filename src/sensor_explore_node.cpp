@@ -1,40 +1,45 @@
 /**
  * Sensor-based autonomous exploration node.
  *
- * Obstacle avoidance : VFH (Vector Field Histogram) from raw LaserScan
+ * Obstacle avoidance : cluster-based VFH via sensor_processor
  * Exploration        : gap frontier detection + duplicate prevention
  *
  * Reference: Paper A (Makino et al. 2019) Sec.3.1, 3.2, 3.3, 3.5.1
  */
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <multi_explore_mapping/sensor_processor.hpp>
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <string>
 #include <vector>
 
 class SensorExploreNode : public rclcpp::Node {
 public:
-    static constexpr int N = 36;   // VFH sectors (10° each)
-
     SensorExploreNode() : Node("sensor_explore") {
         declare_parameter("linear_speed",    0.2);
         declare_parameter("angular_speed",   0.6);
         declare_parameter("safe_distance",   0.5);
         declare_parameter("vfh_threshold",   1.5);
         declare_parameter("valley_min_deg", 30.0);
+        declare_parameter("emergency_dist",  0.1);   // clearance from robot body edge [m]
+        declare_parameter("robot_radius",   0.089);  // TurtleBot3 Burger half-width [m]
         declare_parameter("dup_radius",      1.5);
         declare_parameter("dup_time",      200.0);
 
-        lin_   = get_parameter("linear_speed").as_double();
-        ang_   = get_parameter("angular_speed").as_double();
-        safe_  = get_parameter("safe_distance").as_double();
-        vfh_t_ = get_parameter("vfh_threshold").as_double();
-        v_min_ = get_parameter("valley_min_deg").as_double() * M_PI / 180.0;
-        dup_r_ = get_parameter("dup_radius").as_double();
-        dup_t_ = get_parameter("dup_time").as_double();
+        lin_      = get_parameter("linear_speed").as_double();
+        ang_      = get_parameter("angular_speed").as_double();
+        safe_     = get_parameter("safe_distance").as_double();
+        vfh_t_    = get_parameter("vfh_threshold").as_double();
+        v_deg_    = get_parameter("valley_min_deg").as_double();
+        emerg_    = get_parameter("emergency_dist").as_double();
+        robot_r_  = get_parameter("robot_radius").as_double();
+        dup_r_    = get_parameter("dup_radius").as_double();
+        dup_t_    = get_parameter("dup_time").as_double();
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
@@ -48,17 +53,32 @@ public:
 
         cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 
+        // Multi-robot coordination: share own visited positions with peer robots.
+        // All robots publish/subscribe to the same global topic.
+        // frame_id carries the namespace so each robot can ignore its own messages.
+        ns_ = get_namespace();
+        pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
+            "/shared_exploration_poses", rclcpp::SystemDefaultsQoS());
+
+        peer_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
+            "/shared_exploration_poses", rclcpp::SystemDefaultsQoS(),
+            [this](geometry_msgs::msg::PoseStamped::SharedPtr m) { on_peer_pose(*m); });
+
         timer_ = create_wall_timer(
             std::chrono::milliseconds(100),
             [this]() { control_loop(); });
 
+        share_timer_ = create_wall_timer(
+            std::chrono::seconds(1),
+            [this]() { publish_pose(); });
+
         RCLCPP_INFO(get_logger(),
-            "sensor_explore (VFH+gap+dup): safe=%.2f lin=%.2f ang=%.2f",
-            safe_, lin_, ang_);
+            "sensor_explore: safe=%.2f robot_r=%.3f emerg=%.2f lin=%.2f ang=%.2f ns=%s",
+            safe_, robot_r_, emerg_, lin_, ang_, ns_.c_str());
     }
 
 private:
-    double lin_, ang_, safe_, vfh_t_, v_min_, dup_r_, dup_t_;
+    double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_, dup_r_, dup_t_;
 
     sensor_msgs::msg::LaserScan latest_scan_;
     bool has_scan_ = false;
@@ -67,15 +87,20 @@ private:
     struct OdomPt { double x, y, t;   };
     Pose   pose_{};
     bool   has_odom_ = false;
-    std::vector<OdomPt> history_;
+    std::vector<OdomPt> history_;       // own visited positions (high-freq odom)
+    std::vector<OdomPt> peer_history_;  // other robots' visited positions (1 Hz shared)
+    std::string ns_;                    // own namespace, used to filter self-published poses
 
-    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr     odom_sub_;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr      cmd_pub_;
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr   scan_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr       odom_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr peer_sub_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr        cmd_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr  pose_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr share_timer_;
 
     // ------------------------------------------------------------------
-    // Odometry: track pose and keep 10-minute position history
+    // Odometry: track pose and keep a 10-minute position history
 
     void on_odom(const nav_msgs::msg::Odometry& msg) {
         double x = msg.pose.pose.position.x;
@@ -96,121 +121,56 @@ private:
     }
 
     // ------------------------------------------------------------------
-    // VFH: build polar obstacle density histogram from raw scan beams.
-    //
-    // Each beam within safe_distance*2 adds a proximity-weighted density
-    // to its corresponding sector.
+    // Multi-robot coordination: publish own pose at 1 Hz
 
-    std::vector<double> build_vfh(const sensor_msgs::msg::LaserScan& scan) {
-        std::vector<double> hist(N, 0.0);
-        const double step = 2.0 * M_PI / N;
-
-        for (size_t i = 0; i < scan.ranges.size(); ++i) {
-            double r = scan.ranges[i];
-            if (!std::isfinite(r) || r < scan.range_min || r >= scan.range_max * 0.99)
-                continue;
-            if (r >= safe_ * 2.0) continue;
-
-            double a = scan.angle_min + i * scan.angle_increment;
-            a = std::atan2(std::sin(a), std::cos(a));  // normalise to [-π, π]
-
-            int s = static_cast<int>((a + M_PI) / step);
-            s = std::max(0, std::min(N - 1, s));
-
-            hist[s] += (safe_ * 2.0 - r) / (safe_ * 2.0);
-        }
-        return hist;
+    void publish_pose() {
+        if (!has_odom_) return;
+        geometry_msgs::msg::PoseStamped msg;
+        msg.header.stamp    = now();
+        msg.header.frame_id = ns_;   // identifies the publishing robot
+        msg.pose.position.x = pose_.x;
+        msg.pose.position.y = pose_.y;
+        pose_pub_->publish(msg);
     }
 
-    bool front_blocked(const std::vector<double>& hist) {
-        const double step   = 2.0 * M_PI / N;
-        const int    front  = N / 2;
-        const int    half_w = std::max(1, static_cast<int>(M_PI / 12.0 / step));
-        for (int d = -half_w; d <= half_w; ++d)
-            if (hist[(front + d + N) % N] > vfh_t_) return true;
-        return false;
-    }
+    // Receive peer robots' poses and store in peer_history_.
+    // Own messages (same namespace) are ignored to avoid double-counting.
 
-    // Find passable valleys (consecutive low-density sectors wider than valley_min_deg).
-    // Doubles the array to handle circular wrap-around.
-    std::vector<std::pair<double, double>> vfh_valleys(const std::vector<double>& hist) {
-        const double step    = 2.0 * M_PI / N;
-        const int    min_sec = std::max(1, static_cast<int>(v_min_ / step));
-        std::vector<std::pair<double, double>> result;
-        int run_start = -1;
+    void on_peer_pose(const geometry_msgs::msg::PoseStamped& msg) {
+        if (msg.header.frame_id == ns_) return;   // skip own messages
 
-        for (int i = 0; i < 2 * N; ++i) {
-            bool blocked = hist[i % N] > vfh_t_;
-            if (!blocked) {
-                if (run_start < 0) run_start = i;
-            } else {
-                if (run_start >= 0) {
-                    int length = i - run_start;
-                    if (length >= min_sec) {
-                        int    mid   = (run_start + i - 1) / 2;
-                        double angle = (mid % N) * step - M_PI;
-                        angle = std::atan2(std::sin(angle), std::cos(angle));
-                        result.push_back({angle, length * step});
-                    }
-                    run_start = -1;
-                }
-            }
-        }
-        if (run_start >= 0) {
-            int length = 2 * N - run_start;
-            if (length >= min_sec) {
-                int    mid   = (run_start + 2 * N - 1) / 2;
-                double angle = (mid % N) * step - M_PI;
-                angle = std::atan2(std::sin(angle), std::cos(angle));
-                result.push_back({angle, length * step});
-            }
-        }
-        return result;
-    }
+        const double t = now().seconds();
+        peer_history_.push_back({msg.pose.position.x, msg.pose.position.y, t});
 
-    // ------------------------------------------------------------------
-    // Gap frontier detection (Paper A Sec.3.2, adapted)
-    //
-    // Obstacle↔open transitions between adjacent beams are candidate frontiers.
-    // Sorted nearest-to-forward first.
-
-    std::vector<std::pair<double, double>> find_gap_targets() const {
-        std::vector<std::pair<double, double>> targets;
-        const auto& r = latest_scan_.ranges;
-        const size_t n = r.size();
-
-        for (size_t i = 0; i + 1 < n; ++i) {
-            bool h1 = std::isfinite(r[i])   && r[i]   > latest_scan_.range_min
-                      && r[i]   < latest_scan_.range_max * 0.97;
-            bool h2 = std::isfinite(r[i+1]) && r[i+1] > latest_scan_.range_min
-                      && r[i+1] < latest_scan_.range_max * 0.97;
-            if (h1 == h2) continue;
-
-            double a = latest_scan_.angle_min + (i + 0.5) * latest_scan_.angle_increment;
-            a = std::atan2(std::sin(a), std::cos(a));
-            if (std::abs(a) < M_PI * 0.75)
-                targets.push_back({a, h1 ? r[i] : r[i+1]});
-        }
-        std::sort(targets.begin(), targets.end(),
-            [](const auto& p, const auto& q) {
-                return std::abs(p.first) < std::abs(q.first);
-            });
-        return targets;
+        const double cutoff = t - 600.0;
+        peer_history_.erase(
+            std::remove_if(peer_history_.begin(), peer_history_.end(),
+                [cutoff](const OdomPt& p) { return p.t < cutoff; }),
+            peer_history_.end());
     }
 
     // ------------------------------------------------------------------
     // Duplicate exploration prevention (Paper A Sec.3.3 + 3.5.1)
+    //
+    // Projects the gap target to an estimated world position and checks
+    // whether this robot OR any peer has visited that vicinity recently.
 
     bool is_duplicate(double angle, double dist) const {
-        if (!has_odom_ || history_.empty()) return false;
+        if (!has_odom_) return false;
         const double world_a = pose_.yaw + angle;
         const double proj    = std::min(dist, dup_r_ * 1.5);
         const double tx = pose_.x + proj * std::cos(world_a);
         const double ty = pose_.y + proj * std::sin(world_a);
         const double t_now = now().seconds();
+
         for (const auto& p : history_)
             if (std::hypot(tx - p.x, ty - p.y) < dup_r_ && (t_now - p.t) < dup_t_)
                 return true;
+
+        for (const auto& p : peer_history_)
+            if (std::hypot(tx - p.x, ty - p.y) < dup_r_ && (t_now - p.t) < dup_t_)
+                return true;
+
         return false;
     }
 
@@ -224,13 +184,21 @@ private:
             return;
         }
 
-        auto hist = build_vfh(latest_scan_);
+        const auto ps = sensor_proc::process(
+            latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_, robot_r_);
+
         geometry_msgs::msg::Twist cmd;
 
-        if (!front_blocked(hist)) {
-            // Forward clear: steer toward the nearest non-duplicate frontier
+        if (ps.emergency) {
+            // Cluster inside safety fence: stop immediately and rotate away.
+            cmd.angular.z = ps.avoidance_angular_z;
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                "EMERGENCY: obstacle inside %.2fm fence", emerg_);
+
+        } else if (!ps.front_blocked) {
+            // Forward clear: steer toward nearest non-duplicate gap frontier.
             double target_angle = 0.0;
-            for (const auto& [a, d] : find_gap_targets())
+            for (const auto& [a, d] : ps.gap_targets)
                 if (!is_duplicate(a, d)) { target_angle = a; break; }
 
             cmd.linear.x = lin_;
@@ -238,24 +206,8 @@ private:
                 cmd.angular.z = ang_ * 0.4 * (target_angle > 0.0 ? 1.0 : -1.0);
 
         } else {
-            // Forward blocked: rotate toward best VFH valley
-            auto valleys = vfh_valleys(hist);
-            if (!valleys.empty()) {
-                auto best = std::min_element(valleys.begin(), valleys.end(),
-                    [](const auto& a, const auto& b) {
-                        return std::abs(a.first) < std::abs(b.first);
-                    });
-                cmd.angular.z = ang_ * (best->first >= 0.0 ? 1.0 : -1.0);
-            } else {
-                // Fully surrounded: rotate toward the less-congested side
-                const int front = N / 2;
-                double left = 0.0, right = 0.0;
-                for (int i = 0; i < N / 4; ++i) {
-                    left  += hist[(front + i) % N];
-                    right += hist[(front - 1 - i + N) % N];
-                }
-                cmd.angular.z = (left <= right) ? ang_ : -ang_;
-            }
+            // Forward blocked: rotate toward the VFH valley selected by sensor_proc.
+            cmd.angular.z = ps.avoidance_angular_z;
             RCLCPP_DEBUG(get_logger(), "blocked: steer=%.2f", cmd.angular.z);
         }
 
