@@ -14,19 +14,25 @@ namespace sensor_proc {
 // ---------------------------------------------------------------------------
 // Gap frontier detection on the raw scan.
 //
-// Case A: hit ↔ miss transition between adjacent beams (basic gap, Paper A 3.2)
+// Case A: hit ↔ miss transition between adjacent beams (wall edge into open space)
 // Case B: both beams finite but |r_i - r_{i+1}| > safe * 1.5
-//         → doorways and corridor ends where the beam depth changes abruptly
+//         → doorways and corridor ends where beam depth changes abruptly
 //
-// Results sorted nearest-to-forward so control_loop picks the closest target.
+// Branch point coordinate: Cartesian midpoint of the two boundary scan points
+// (Paper 18KMJ27 Sec.3.2: B_c = [(X_{P_{l+1}}+X_{P_l})/2, (Y_{P_{l+1}}+Y_{P_l})/2])
+//
+// For miss beams, a virtual range is estimated as min(rmax*0.7, r_hit*2.0)
+// to represent the near edge of the unknown space.
 
-static std::vector<std::pair<double, double>> detect_gaps(
+static std::vector<sensor_proc::ProcessedScan::GapTarget> detect_gaps(
     const sensor_msgs::msg::LaserScan& scan,
-    double safe_distance)
+    double safe_distance,
+    double min_gap_width)
 {
-    std::vector<std::pair<double, double>> targets;
-    const auto& r = scan.ranges;
-    const float rmax  = scan.range_max;
+    using GapTarget = sensor_proc::ProcessedScan::GapTarget;
+    std::vector<GapTarget> targets;
+    const auto& r  = scan.ranges;
+    const float rmax   = scan.range_max;
     const float safe_f = static_cast<float>(safe_distance);
 
     for (size_t i = 0; i + 1 < r.size(); ++i) {
@@ -40,19 +46,39 @@ static std::vector<std::pair<double, double>> detect_gaps(
             is_gap = (std::abs(ri - ri1) > safe_f * 1.5f);
         if (!is_gap) continue;
 
-        double a = scan.angle_min + (i + 0.5) * scan.angle_increment;
-        a = std::atan2(std::sin(a), std::cos(a));
+        // Beam angles
+        const double a_i  = scan.angle_min + static_cast<double>(i)     * scan.angle_increment;
+        const double a_i1 = scan.angle_min + static_cast<double>(i + 1) * scan.angle_increment;
 
-        // Exclude rear arc (> 135° off-forward) — not useful as exploration targets
-        if (std::abs(a) >= M_PI * 0.75) continue;
+        // Exclude rear arc (> 135° off-forward)
+        const double a_mid = (a_i + a_i1) * 0.5;
+        if (std::abs(std::atan2(std::sin(a_mid), std::cos(a_mid))) >= M_PI * 0.75) continue;
 
-        const double dist = h1 ? ri : (h2 ? ri1 : std::min(ri, ri1));
-        targets.push_back({a, dist});
+        // Effective range for each endpoint.
+        // Miss beam: estimate as min(rmax*0.7, r_hit*2) — near edge of unknown space.
+        const float r1 = h1 ? ri  : std::min(rmax * 0.7f, ri1 * 2.0f);
+        const float r2 = h2 ? ri1 : std::min(rmax * 0.7f, ri  * 2.0f);
+
+        // Cartesian endpoints in robot (laser) frame
+        const double p1x = r1 * std::cos(a_i);
+        const double p1y = r1 * std::sin(a_i);
+        const double p2x = r2 * std::cos(a_i1);
+        const double p2y = r2 * std::sin(a_i1);
+
+        // Gap width: Euclidean distance between the two boundary points
+        const double gap_width = std::hypot(p2x - p1x, p2y - p1y);
+        if (gap_width < min_gap_width) continue;
+
+        // Branch point: Cartesian midpoint (Paper 18KMJ27 Sec.3.2 formula)
+        const double mx = (p1x + p2x) * 0.5;
+        const double my = (p1y + p2y) * 0.5;
+
+        targets.push_back({std::atan2(my, mx), std::hypot(mx, my), gap_width});
     }
 
     std::sort(targets.begin(), targets.end(),
-        [](const auto& p, const auto& q) {
-            return std::abs(p.first) < std::abs(q.first);
+        [](const GapTarget& p, const GapTarget& q) {
+            return std::abs(p.angle) < std::abs(q.angle);
         });
     return targets;
 }
@@ -66,7 +92,9 @@ ProcessedScan process(
     double valley_min_deg,
     double emergency_dist,
     double angular_speed,
-    double robot_radius)
+    double robot_radius,
+    double front_cone_deg,
+    double min_gap_width)
 {
     ProcessedScan ps;
 
@@ -81,7 +109,7 @@ ProcessedScan process(
     // build_histogram() spreads each cluster over atan2(radius+0.05, min_dist)
     // in the histogram, giving narrow obstacles their correct angular footprint.
     avoidance::VFH vfh(safe_distance, vfh_threshold, valley_min_deg,
-                       emergency_dist, angular_speed, robot_radius);
+                       emergency_dist, angular_speed, robot_radius, front_cone_deg);
     const auto result = vfh.compute(ps.clusters);
     ps.vfh_hist = vfh.histogram();
 
@@ -105,7 +133,7 @@ ProcessedScan process(
     }
 
     // Step 3: Gap frontier detection from raw scan.
-    ps.gap_targets = detect_gaps(scan, safe_distance);
+    ps.gap_targets = detect_gaps(scan, safe_distance, min_gap_width);
 
     return ps;
 }

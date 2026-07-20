@@ -4,13 +4,15 @@
 namespace avoidance {
 
 VFH::VFH(double safe_dist, double vfh_threshold, double valley_min_deg,
-         double emergency_dist, double angular_speed, double robot_radius)
+         double emergency_dist, double angular_speed, double robot_radius,
+         double front_cone_deg)
     : safe_(safe_dist),
       vfh_t_(vfh_threshold),
       v_min_(valley_min_deg * M_PI / 180.0),
       emerg_d_(emergency_dist),
       ang_(angular_speed),
       robot_r_(robot_radius),
+      front_cone_(front_cone_deg * M_PI / 180.0),
       hist_(N, 0.0)
 {}
 
@@ -72,9 +74,9 @@ double VFH::check_emergency(const std::vector<cluster::Cluster>& clusters) const
 // Step 3: check whether the ±15° forward cone is blocked.
 
 bool VFH::front_blocked() const {
-    const double step  = 2.0 * M_PI / N;
-    const int    front = N / 2;
-    const int    half_w = std::max(1, static_cast<int>(M_PI / 12.0 / step));
+    const double step   = 2.0 * M_PI / N;
+    const int    front  = N / 2;
+    const int    half_w = std::max(1, static_cast<int>(front_cone_ / step));
     for (int d = -half_w; d <= half_w; ++d)
         if (hist_[(front + d + N) % N] > vfh_t_) return true;
     return false;

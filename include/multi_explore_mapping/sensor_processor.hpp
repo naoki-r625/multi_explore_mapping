@@ -39,8 +39,15 @@ struct ProcessedScan {
     /// Rotation command to escape the obstacle; 0.0 when CLEAR
     double avoidance_angular_z{0.0};
 
-    /// Gap frontier targets: {angle [rad], distance [m]}, sorted nearest-to-front
-    std::vector<std::pair<double, double>> gap_targets;
+    /// Gap frontier target: gap center in robot-frame polar + physical opening width
+    struct GapTarget {
+        double angle;  // bearing to gap center [rad], robot frame
+        double dist;   // distance to gap center [m]
+        double width;  // Cartesian gap width |P2 - P1| [m]
+    };
+
+    /// Gap frontier targets sorted nearest-to-forward first
+    std::vector<GapTarget> gap_targets;
 };
 
 /**
@@ -50,9 +57,11 @@ struct ProcessedScan {
  * @param valley_min_deg Minimum passable gap width [deg]
  * @param emergency_dist Cluster closer than this triggers EMERGENCY [m]
  * @param angular_speed  Reference rotation speed used to set avoidance_angular_z
- * @param robot_radius   Half-width of the robot body [m]; used to inflate obstacle
- *                       angular extent in VFH so that angled wall approaches are
- *                       blocked before the robot body contacts the surface
+ * @param robot_radius   Half-width of the robot body [m]; inflates obstacle angular extent
+ * @param front_cone_deg Half-width of the "front blocked" check cone [deg].
+ *                       Default 30° catches walls at up to ±30° off-forward.
+ *                       The original 10° (due to integer truncation of the intended 15°)
+ *                       was too narrow for diagonal wall approaches.
  */
 ProcessedScan process(
     const sensor_msgs::msg::LaserScan& scan,
@@ -61,6 +70,8 @@ ProcessedScan process(
     double valley_min_deg,
     double emergency_dist,
     double angular_speed,
-    double robot_radius = 0.0);
+    double robot_radius   = 0.0,
+    double front_cone_deg = 30.0,
+    double min_gap_width  = 0.4);
 
 } // namespace sensor_proc

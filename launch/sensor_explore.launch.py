@@ -22,6 +22,9 @@ def generate_launch_description():
         'valley_min_deg':       30.0,   # 通過可能な谷の最小幅 [deg]
         'robot_radius':         0.13,  # TurtleBot3 Burger 半幅 [m] (横幅178mm)
         'emergency_dist':        0.22,   # ロボット端からの緊急停止クリアランス [m]
+        'front_cone_deg':       30.0,   # 前方ブロック判定の半角 [deg] (大きくすると斜め壁も検知)
+        # 分岐点検出 (論文A 3.2節)
+        'min_gap_width':         0.4,   # ギャップ最小幅 [m] (未満は分岐点無視)
         # 重複探査防止 (論文A 3.3節 + 3.5.1節)
         'dup_radius':            1.5,   # 重複判定半径 [m]
         'dup_time':            200.0,   # 重複判定時間窓 [s]

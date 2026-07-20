@@ -35,6 +35,8 @@ public:
         declare_parameter("dup_radius",      1.5);
         declare_parameter("dup_time",      200.0);
         declare_parameter("frontier_ttl",  300.0);   // frontier max age [s]
+        declare_parameter("front_cone_deg", 30.0);   // VFH blocked-check half-width [deg]
+        declare_parameter("min_gap_width",  0.4);    // minimum branch point opening width [m]
         declare_parameter("odom_frame", std::string("odom"));
 
         lin_          = get_parameter("linear_speed").as_double();
@@ -47,6 +49,8 @@ public:
         dup_r_        = get_parameter("dup_radius").as_double();
         dup_t_        = get_parameter("dup_time").as_double();
         frontier_ttl_ = get_parameter("frontier_ttl").as_double();
+        fcone_        = get_parameter("front_cone_deg").as_double();
+        min_gap_w_    = get_parameter("min_gap_width").as_double();
         odom_frame_   = get_parameter("odom_frame").as_string();
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
@@ -99,7 +103,7 @@ public:
 
 private:
     double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
-    double dup_r_, dup_t_, frontier_ttl_;
+    double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
     std::string odom_frame_;
 
     sensor_msgs::msg::LaserScan latest_scan_;
@@ -130,6 +134,7 @@ private:
     struct Frontier {
         double x, y;   // world coordinates [m]
         double t;      // discovery time [wall-clock s]
+        double width;  // gap opening width [m] — wider = more open space
     };
     std::vector<Frontier> frontier_store_;
 
@@ -148,11 +153,11 @@ private:
     }
 
     // Add a frontier at world (wx, wy) if not already known and not visited.
-    void add_frontier(double wx, double wy) {
+    void add_frontier(double wx, double wy, double width = 1.0) {
         if (is_visited(wx, wy)) return;
         for (const auto& f : frontier_store_)
             if (std::hypot(wx - f.x, wy - f.y) < dup_r_ * 0.5) return;  // already known
-        frontier_store_.push_back({wx, wy, now().seconds()});
+        frontier_store_.push_back({wx, wy, now().seconds(), width});
     }
 
     // Remove frontiers that have been visited or have exceeded their TTL.
@@ -262,15 +267,15 @@ private:
         }
 
         const auto ps = sensor_proc::process(
-            latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_, robot_r_);
+            latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_, robot_r_, fcone_, min_gap_w_);
 
         // Convert gap targets from robot-relative polar to world coords
         // and add any new ones to the persistent frontier store.
         if (has_odom_) {
-            for (const auto& [a, d] : ps.gap_targets) {
+            for (const auto& [a, d, w] : ps.gap_targets) {
                 const double wa = pose_.yaw + a;
                 add_frontier(pose_.x + d * std::cos(wa),
-                             pose_.y + d * std::sin(wa));
+                             pose_.y + d * std::sin(wa), w);
             }
             prune_frontiers();
         }
@@ -296,7 +301,8 @@ private:
                     const double raw = std::atan2(dy, dx) - pose_.yaw;
                     const double ang = std::atan2(std::sin(raw), std::cos(raw));
                     const double dist = std::hypot(dx, dy);
-                    const double cost = std::abs(ang) + 0.1 * dist;
+                    // Prefer wide openings: subtract width bonus so wider gaps win ties
+                    const double cost = std::abs(ang) + 0.1 * dist - 0.3 * f.width;
                     if (cost < best_cost) { best_cost = cost; best_angle = ang; }
                 }
             }

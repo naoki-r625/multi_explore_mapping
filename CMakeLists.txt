@@ -25,6 +25,7 @@ find_package(OpenCV REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common search kdtree segmentation)
 
 # ==================== Include Directories ====================
 include_directories(include)
@@ -48,6 +49,7 @@ add_executable(sensor_explore_node
   src/sensor_explore_node.cpp
   src/sensor_processor.cpp
   src/vfh_acoidance.cpp.cpp
+  src/cluster_detector.cpp
 )
 ament_target_dependencies(sensor_explore_node
   rclcpp
@@ -56,9 +58,12 @@ ament_target_dependencies(sensor_explore_node
   nav_msgs
   visualization_msgs
 )
-# geometry_msgs already covers PoseArray; no extra package needed.
 target_include_directories(sensor_explore_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  ${PCL_INCLUDE_DIRS}
+)
+target_link_libraries(sensor_explore_node
+  ${PCL_LIBRARIES}
 )
 
 # 2. Explore Supervisor
