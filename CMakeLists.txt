@@ -18,6 +18,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(rclcpp_action REQUIRED)
 
 # ✅ ICP 実装に必要な依存を追加
 find_package(Eigen3 REQUIRED)
@@ -48,7 +49,7 @@ target_link_libraries(icp_lib
 add_executable(sensor_explore_node
   src/sensor_explore_node.cpp
   src/sensor_processor.cpp
-  src/vfh_acoidance.cpp.cpp
+  src/vfh_avoidance.cpp
   src/cluster_detector.cpp
 )
 ament_target_dependencies(sensor_explore_node
@@ -57,6 +58,8 @@ ament_target_dependencies(sensor_explore_node
   sensor_msgs
   nav_msgs
   visualization_msgs
+  tf2_ros
+  tf2_geometry_msgs
 )
 target_include_directories(sensor_explore_node PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

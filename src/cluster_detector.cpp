@@ -68,7 +68,8 @@ std::vector<Cluster> detect(
                 cloud->points[idx].y - cy));
         }
 
-        // Adaptive wall threshold: close obstacles fill more beams for the same size
+        // Adaptive wall threshold: close obstacles fill more beams for the same size.
+        // At 1m range LDS-01 has ~1° spacing so a 15-beam cluster ≈ 26cm arc (typical wall).
         const double mean_range = std::hypot(cx, cy);
         int wall_thresh;
         if      (mean_range < 1.5) wall_thresh = 30;

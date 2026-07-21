@@ -39,7 +39,7 @@ def launch_setup(context, *args, **kwargs):
         )
         robots = [
             ('robot_1', 'burger', 0.0, 2.0, 0.0),
-            ('robot_2', 'burger', 0.0, -2.0, 0.0),
+            #('robot_2', 'burger', 0.0, -2.0, 0.0),
         ]
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)
@@ -176,7 +176,7 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-    # ✅ 初期位置情報をTFで表現（map → robot_i/map を正確に繋ぐ）
+    #  初期位置情報をTFで表現（map → robot_i/map を正確に繋ぐ）
     static_tf_nodes = []
     for (ns, model, x, y, yaw) in robots:
         static_tf_nodes.append(
@@ -203,7 +203,7 @@ def launch_setup(context, *args, **kwargs):
     return [
         gzserver,
         gzclient,
-        *static_tf_nodes,  # ✅ static_tf を先に起動
+        *static_tf_nodes,  #  static_tf を先に起動
         delayed_robots,
     ]
 
