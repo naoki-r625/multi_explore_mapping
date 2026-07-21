@@ -192,7 +192,7 @@ private:
         const double x = msg.pose.pose.position.x;
         const double y = msg.pose.pose.position.y;
         const auto& q = msg.pose.pose.orientation;
-        const double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+            yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
                                       1.0 - 2.0 * (q.y * q.y + q.z * q.z));
         pose_     = {x, y, yaw};
         has_odom_ = true;
