@@ -7,6 +7,7 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <unordered_map>
 
 using OccupancyGrid = nav_msgs::msg::OccupancyGrid;
 
@@ -24,8 +25,12 @@ public:
         declare_parameter("max_correspondence_distance",  0.5);   // メートル
         declare_parameter("overlap_filter_margin",        2.0);   // メートル
         declare_parameter("max_feature_points",           1500);
+        // 特徴点を空間均一化するボクセルグリッドのセルサイズ [m]。
+        // ランダム削減の代わりに使い、壁密集部への偏りを防ぐ。
+        // 大きいほど点数が減り高速だが精度も落ちる。0.1〜0.25 が目安。
+        declare_parameter("voxel_size",                  0.15);
         // マップが大きくなるほど Canny/書き込みコストが増えるため、
-        // 処理前にこの倍率でグリッドを縮小する (1=無効)。解像度は resolution*factor になる。
+        // マージ書き込みのみこの倍率でグリッドを縮小する (1=無効)。
         declare_parameter("map_downsample_factor",        2);
         // 統合処理の目標周期。処理が長引いても詰まらないよう、毎回 処理後に再スケジュールする。
         declare_parameter("target_period_sec",            2.0);
@@ -78,6 +83,40 @@ private:
             elapsed, period, (elapsed > period) ? " — falling behind, running back-to-back" : "");
 
         schedule_next_cycle(period - elapsed);
+    }
+
+    // 2D ボクセルグリッドフィルタ: 空間を cell_size [m] のセルに分割し、
+    // 各セル内の点群重心を1点だけ残す。
+    // ランダム削減と比較して:
+    //   - 壁密集部の点が間引かれ、広域カバレッジが均等になる
+    //   - ICP の対応が偏らないためマッチング精度が上がる
+    //   - 点数が空間範囲に比例して自動的に抑制される
+    Eigen::MatrixXf voxel_grid_filter(
+        const std::vector<Eigen::Vector2f>& pts, float cell_size)
+    {
+        if (pts.empty()) return Eigen::MatrixXf(0, 2);
+
+        // key = (ix + offset) * stride + (iy + offset)
+        // offset=100000 で座標が −5000m〜+5000m の範囲を扱える
+        constexpr int64_t OFFSET = 100000LL;
+        constexpr int64_t STRIDE = 200001LL;
+        std::unordered_map<int64_t, std::pair<Eigen::Vector2f, int>> cells;
+        cells.reserve(pts.size());
+
+        for (const auto& p : pts) {
+            const int64_t ix = static_cast<int64_t>(std::floor(p.x() / cell_size));
+            const int64_t iy = static_cast<int64_t>(std::floor(p.y() / cell_size));
+            const int64_t key = (ix + OFFSET) * STRIDE + (iy + OFFSET);
+            auto& [acc, cnt] = cells[key];
+            acc += p;
+            ++cnt;
+        }
+
+        Eigen::MatrixXf result(static_cast<int>(cells.size()), 2);
+        int i = 0;
+        for (const auto& [k, vc] : cells)
+            result.row(i++) = (vc.first / static_cast<float>(vc.second)).transpose();
+        return result;
     }
 
     // OccupancyGrid を factor 倍粗いグリッドに縮小する。
@@ -149,17 +188,25 @@ private:
                                    s*lx + c*ly + pose.y});
                 }
 
-        const int max_pts = (int)get_parameter("max_feature_points").as_int();
-        if ((int)pts.size() > max_pts) {
-            std::default_random_engine rng(42);
-            std::shuffle(pts.begin(), pts.end(), rng);
-            pts.resize(max_pts);
-        }
+        // ボクセルグリッドフィルタで空間均一化:
+        // Canny エッジは壁付近に密集しがちなため、ランダム削減だと偏った点群になる。
+        // セル重心1点ずつを残すことで ICP の対応が均等に取れ、精度が向上する。
+        const float voxel = (float)get_parameter("voxel_size").as_double();
+        Eigen::MatrixXf filtered = voxel_grid_filter(pts, voxel);
 
-        Eigen::MatrixXf result((int)pts.size(), 2);
-        for (int i = 0; i < (int)pts.size(); ++i)
-            result.row(i) = pts[i].transpose();
-        return result;
+        // 安全上限: ボクセル後でも多すぎる場合はランダム削減で最終調整
+        const int max_pts = (int)get_parameter("max_feature_points").as_int();
+        if (filtered.rows() > max_pts) {
+            std::vector<int> idx(filtered.rows());
+            std::iota(idx.begin(), idx.end(), 0);
+            std::default_random_engine rng(42);
+            std::shuffle(idx.begin(), idx.end(), rng);
+            idx.resize(max_pts);
+            Eigen::MatrixXf trimmed(max_pts, 2);
+            for (int i = 0; i < max_pts; ++i) trimmed.row(i) = filtered.row(idx[i]);
+            return trimmed;
+        }
+        return filtered;
     }
 
     // reference の包含バウンディングボックス(+ margin)に入る pts だけを返す
@@ -310,12 +357,6 @@ private:
             map2 = maps_["robot_2"];
         }
 
-        // 特徴抽出・マージの両方をこの縮小グリッドで行うことで
-        // H*W に比例するコスト (Canny / 書き込み) を factor^2 で削減する
-        const int downsample_factor = (int)get_parameter("map_downsample_factor").as_int();
-        map1 = downsample(map1, downsample_factor);
-        map2 = downsample(map2, downsample_factor);
-
         const Pose2D init1{
             (float)get_parameter("robot_1_init_x").as_double(),
             (float)get_parameter("robot_1_init_y").as_double(),
@@ -329,17 +370,23 @@ private:
         const float max_corr_dist  = (float)get_parameter("max_correspondence_distance").as_double();
         const float overlap_margin = (float)get_parameter("overlap_filter_margin").as_double();
 
-        // 両マップを世界座標に変換してエッジ特徴点を抽出
+        // 特徴点抽出は元解像度マップで実施（ダウンサンプルなし）→ 高精度 Canny エッジ。
+        // 点数制御はボクセルグリッドフィルタが担うため、マップ縮小は不要。
         Eigen::MatrixXf pts1 = extract_world_points(map1, init1);
         Eigen::MatrixXf pts2 = extract_world_points(map2, init2);
 
         RCLCPP_INFO(get_logger(),
-            "World-frame feature points: robot_1=%ld, robot_2=%ld",
+            "World-frame feature points (voxel-filtered): robot_1=%ld, robot_2=%ld",
             pts1.rows(), pts2.rows());
+
+        // マージ用ダウンサンプル済みマップ (フォールバック含む全 merge_and_publish で共用)
+        const int merge_factor = (int)get_parameter("map_downsample_factor").as_int();
+        const auto map1_ds = downsample(map1, merge_factor);
+        const auto map2_ds = downsample(map2, merge_factor);
 
         if (pts1.rows() < 10 || pts2.rows() < 10) {
             RCLCPP_WARN(get_logger(), "Insufficient features — merging with initial poses only");
-            merge_and_publish(map1, map2, init1, init2,
+            merge_and_publish(map1_ds, map2_ds, init1, init2,
                               Eigen::Matrix2f::Identity(),
                               Eigen::Vector2f::Zero());
             return;
@@ -358,7 +405,7 @@ private:
         if (pts1_overlap.rows() < 10 || pts2_overlap.rows() < 10) {
             RCLCPP_WARN(get_logger(),
                 "Maps do not overlap sufficiently — merging with initial poses only");
-            merge_and_publish(map1, map2, init1, init2,
+            merge_and_publish(map1_ds, map2_ds, init1, init2,
                               Eigen::Matrix2f::Identity(),
                               Eigen::Vector2f::Zero());
             return;
@@ -382,13 +429,15 @@ private:
             RCLCPP_WARN(get_logger(),
                 "ICP result unreliable (error=%.4f m, valid=%d) — merging with initial poses only",
                 result.final_error, result.valid_correspondences);
-            merge_and_publish(map1, map2, init1, init2,
+            merge_and_publish(map1_ds, map2_ds, init1, init2,
                               Eigen::Matrix2f::Identity(),
                               Eigen::Vector2f::Zero());
             return;
         }
 
-        merge_and_publish(map1, map2, init1, init2, result.R, result.t);
+        // マージ書き込みループは H*W に比例するためダウンサンプル済みマップを使用。
+        // 特徴点抽出は元解像度で行ったため ICP 精度には影響しない。
+        merge_and_publish(map1_ds, map2_ds, init1, init2, result.R, result.t);
     }
 
     rclcpp::Publisher<OccupancyGrid>::SharedPtr     map_pub_;

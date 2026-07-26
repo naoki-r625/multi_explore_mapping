@@ -24,23 +24,24 @@ def launch_setup(context, *args, **kwargs):
         os.environ['GAZEBO_MODEL_PATH'] = pkg_my_mapping
 
     #
+    common_robots = [
+        ('robot_1', 'burger', 0.0,  2.0, 0.0),
+        ('robot_2', 'burger', 0.0, -2.0, 0.0),
+        #('robot_3', 'burger', 2.0,  0.0, 0.0),
+        #('robot_4', 'burger',-2.0,  0.0, 0.0),
+        #('robot_5', 'burger', 2.0,  2.0, 0.0),
+        #('robot_6', 'burger', 2.0, -2.0, 0.0),
+    ]
+
     if world_type == 'custom':
         world_path = os.path.join(pkg_my_mapping, 'worlds', 'my_custom_room.world')
-        #
-        robots = [
-            ('robot_1', 'burger', 3.0, 0.0 ,0.0),
-            #('robot_2', 'burger', -3.0, 0.0, 0.0),
-        ]
+        robots = common_robots
     else:
-        #
         world_path = os.path.join(
             get_package_share_directory('aws_robomaker_small_warehouse_world'),
             'worlds', 'no_roof_small_warehouse', 'no_roof_small_warehouse.world'
         )
-        robots = [
-            ('robot_1', 'burger', 0.0, 2.0, 0.0),
-            #('robot_2', 'burger', 0.0, -2.0, 0.0),
-        ]
+        robots = common_robots
 
     # 1. Gazebo Server の起動 (AWS Warehouseワールド)
     gzserver = IncludeLaunchDescription(
@@ -57,9 +58,12 @@ def launch_setup(context, *args, **kwargs):
         )
     )
 
-    robot_nodes = []
+    robot_timers = []  # one TimerAction per robot, staggered by SPAWN_INTERVAL
 
-    for (ns, model, x, y, yaw) in robots:
+    SPAWN_START    = 2.0   # [s] wait for Gazebo to finish loading the world
+    SPAWN_INTERVAL = 1.0   # [s] gap between each robot's spawn + SLAM start
+
+    for i, (ns, model, x, y, yaw) in enumerate(robots):
         # SDFモデルの動的書き換え
         sdf_path = os.path.join(pkg_tb3_gazebo, 'models', f'turtlebot3_{model}', 'model.sdf')
         with open(sdf_path, 'r') as f:
@@ -77,7 +81,8 @@ def launch_setup(context, *args, **kwargs):
 
         # Robot State Publisher
         urdf_path = os.path.join(pkg_tb3_gazebo, 'urdf', f'turtlebot3_{model}.urdf')
-        robot_nodes.append(
+        per_robot = []
+        per_robot.append(
             Node(
                 package='robot_state_publisher',
                 executable='robot_state_publisher',
@@ -92,8 +97,7 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
-        #
-        robot_nodes.append(
+        per_robot.append(
             Node(
                 package='joint_state_publisher',
                 executable='joint_state_publisher',
@@ -105,7 +109,7 @@ def launch_setup(context, *args, **kwargs):
         )
 
         # Gazeboへのスポーン
-        robot_nodes.append(
+        per_robot.append(
             Node(
                 package='gazebo_ros',
                 executable='spawn_entity.py',
@@ -121,7 +125,7 @@ def launch_setup(context, *args, **kwargs):
         )
 
         # 各ロボット専用の SLAM (slam_toolbox) ノード
-        robot_nodes.append(
+        per_robot.append(
             Node(
                 package='slam_toolbox',
                 executable='async_slam_toolbox_node',
@@ -137,42 +141,52 @@ def launch_setup(context, *args, **kwargs):
                     'mode': 'mapping',
                     'transform_timeout': 0.2,
                     'minimum_time_interval': 0.1,
-                    
+
                     # ===== ループクロージャ基本制御 =====
                     'do_loop_closing': True,
                     'map_update_interval': 1.0,
 
                     # 1. スキャンマッチングの厳格化（誤認識を防ぐ）
-                    'minimum_note_score': 0.55,      # 0.55から引き下げ。ループ候補を厳しく弾きすぎないように　調整マッチングスコア閾値
-                    'link_match_minimum_response_coarse': 0.1, #粗探索における相関値閾値
-                    'link_scan_maximum_distance': 1.5, # 近くの壁とのマッチング精度向上 最大対応点探索距離
+                    # 'minimum_note_score': 0.55,                    # ← 削除：存在しないパラメータ（無効）
+                    # 'link_match_minimum_response_coarse': 0.1,     # ← 削除：存在しないパラメータ（無効）
+                    'link_match_minimum_response_fine': 0.2,         # ← 追加：正しい名前。デフォルト0.1よりやや厳格化
+                    'link_scan_maximum_distance': 1.5,
 
-                    # 2. ループ検索範囲の最適化（AWS Warehouseのスケールに合わせる）
-                    'loop_search_maximum_distance': 4.0,  # 4.0から少し拡大（オドメトリのズレをカバー）自己位置の不確かさの境界
-                    'loop_match_minimum_chain_size': 5,    # 3から5へ。誤ったループ（誤マッチング）による地図の崩壊を防ぐ 時間的一貫性の検証閾値
-                    'loop_search_space_dimension': 8.0,    # 探索サブマップのサイズ（8.0でOK） ローカルサブマップ（局所地図）の空間サイズ
-                    'loop_match_maximum_variance_coarse': 0.4, #共分散・分散の許容閾値
+                    # 2. ループ検索範囲の最適化
+                    'loop_search_maximum_distance': 1.5,             # 4.0 → 縮小（隣の棚に迷い込まないように）
+                    'loop_match_minimum_chain_size': 10,             # 5 → 10に戻す（短いチェーンでの誤検出防止）
+                    'loop_search_space_dimension': 2.0,
+                    'loop_match_maximum_variance_coarse': 0.55,       # そのままでOK（厳格化に効いている）
+                    'loop_match_minimum_response_coarse': 0.45,      # ← 追加：抜けていた本命パラメータ
+                    'loop_match_minimum_response_fine': 0.65,        # ← 追加：抜けていた本命パラメータ
 
                     # 3. グラフ登録（キーフレーム）の頻度調整
-                    # ロボットが少し動いただけでグラフにノードを追加し、ループ検知のチャンスを増やす
-                    'minimum_travel_distance': 0.1,        # 0.2から0.1へ短縮 キーフレーム生成の幾何学的閾値
-                    'minimum_travel_heading': 0.1,         # 0.2から0.1へ短縮 キーフレーム生成の幾何学的閾値
+                    'minimum_travel_distance': 0.1,
+                    'minimum_travel_heading': 0.1,
 
-                    # 4. 【重要】ループ閉鎖後の最適化（スキャンバッファとグラフ調整）
-                    'scan_buffer_size': 10,                # 過去のスキャンを保持するバッファ数 スキャンウィンドウサイズ
-                    'scan_buffer_max_num_lines': 50,
-                    'correlation_search_space_dimension': 0.5, #コスト関数の平滑化カーネル
+                    # 4. ループ閉鎖後の最適化
+                    'scan_buffer_size': 10,
+                    # 'scan_buffer_max_num_lines': 50,               # ← 削除：存在しないパラメータ（無効）
+                    'correlation_search_space_dimension': 0.5,
                     'correlation_search_space_resolution': 0.01,
                     'correlation_search_space_smear_deviation': 0.03,
 
-                    # 5. 補正計算（Ceres Solver）のバックエンド設定 ポーズグラフ最適化（Pose Graph Optimization: PGO）の実行頻度
-                    'loop_search_space_resolution': 0.05, #グラフ最適化のトリガー頻度
-                    'optimize_every_n_nodes': 3,          # 3つノードが追加されるたびにグラフを最適化
+                    # 5. Ceres Solver バックエンド設定
+                    'loop_search_space_resolution': 0.05,
+                    'optimize_every_n_nodes': 3,
                 }],
                 remappings=[
                     ('/map', f'/{ns}/map'),
                     ('/map_metadata', f'/{ns}/map_metadata')
                 ]
+            )
+        )
+
+        # ロボットごとに時間差でスポーン（レースコンディション防止）
+        robot_timers.append(
+            TimerAction(
+                period=SPAWN_START + i * SPAWN_INTERVAL,
+                actions=per_robot
             )
         )
 
@@ -184,27 +198,19 @@ def launch_setup(context, *args, **kwargs):
                 package='tf2_ros',
                 executable='static_transform_publisher',
                 name=f'static_map_to_{ns}_map',
-                # 引数を8個のスタイル（x, y, z, yaw, pitch, roll, frame_id, child_frame_id）に変更
-                # yaw（Z軸回転）をそのまま渡せるため、初期の向き（yaw）も完璧に反映されます
                 arguments=[
                     '0.0', '0.0', '0.0',  # X, Y, Z
-                    '0.0', '0.0', '0.0', # Yaw, Pitch, Roll
-                    'map', f'{ns}/map'      # 親フレーム, 子フレーム
+                    '0.0', '0.0', '0.0',  # Yaw, Pitch, Roll
+                    'map', f'{ns}/map'     # 親フレーム, 子フレーム
                 ],
             )
         )
 
-    # 10秒待ってから一斉起動
-    delayed_robots = TimerAction(
-        period=5.0,
-        actions=robot_nodes
-    )
-
     return [
         gzserver,
         gzclient,
-        *static_tf_nodes,  #  static_tf を先に起動
-        delayed_robots,
+        *static_tf_nodes,   # static_tf を先に起動
+        *robot_timers,      # robot_1: 5s, robot_2: 9s, ..., robot_6: 25s
     ]
 
 def generate_launch_description():

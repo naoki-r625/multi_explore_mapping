@@ -23,8 +23,12 @@ def generate_launch_description():
             'max_icp_iterations':        50,
             'icp_convergence_threshold': 0.05,  # メートル単位
             'max_feature_points':        2000,
-            # 性能パラメータ: マップ縮小倍率と統合周期
-            'map_downsample_factor':     2,    # 解像度を2倍粗くしてCanny/書き込みコストを1/4に
+            # 特徴点の空間均一化 (ボクセルグリッドフィルタ)
+            # 壁密集部への偏りを防ぎ ICP 精度を改善。0.1〜0.25m が目安。
+            'voxel_size':                0.15,
+            # 性能パラメータ: マージ書き込み用縮小倍率と統合周期
+            # ※特徴点抽出は元解像度で行うためこの値は ICP 精度に影響しない
+            'map_downsample_factor':     1,    # 解像度を2倍粗くして書き込みコストを1/4に
             'target_period_sec':         2.0,  # 処理が長引いても詰まらないよう自己再スケジュール
         }]
     )

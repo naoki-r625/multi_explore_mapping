@@ -27,7 +27,7 @@ def generate_launch_description():
         'min_gap_width':         0.4,   # ギャップ最小幅 [m] (未満は分岐点無視)
         # 重複探査防止
         'dup_radius':            1.5,   # 重複判定半径 [m]
-        'dup_time':            200.0,   # 重複判定時間窓 [s]
+        'dup_time':            600.0,   # 重複判定時間窓 [s] (= 10分履歴ウィンドウと一致させる)
         'frontier_ttl':        300.0,  # フロンティア有効期間 [s]
         'odom_frame': 'map',   # SLAM が map→odom TF を配信している場合
     }
@@ -46,6 +46,38 @@ def generate_launch_description():
             executable='sensor_explore_node',
             name='sensor_explore',
             namespace='robot_2',
+            parameters=[common_params],
+            output='screen',
+        ),
+        Node(
+            package='multi_explore_mapping',
+            executable='sensor_explore_node',
+            name='sensor_explore',
+            namespace='robot_3',
+            parameters=[common_params],
+            output='screen',
+        ),
+        Node(
+            package='multi_explore_mapping',
+            executable='sensor_explore_node',
+            name='sensor_explore',
+            namespace='robot_4',
+            parameters=[common_params],
+            output='screen',
+        ),
+        Node(
+            package='multi_explore_mapping',
+            executable='sensor_explore_node',
+            name='sensor_explore',
+            namespace='robot_5',
+            parameters=[common_params],
+            output='screen',
+        ),
+        Node(
+            package='multi_explore_mapping',
+            executable='sensor_explore_node',
+            name='sensor_explore',
+            namespace='robot_6',
             parameters=[common_params],
             output='screen',
         ),
