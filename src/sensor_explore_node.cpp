@@ -334,8 +334,8 @@ private:
                 "EMERGENCY: obstacle inside %.2fm fence", emerg_);
 
         } else if (!ps.front_blocked) {
-            // Select best frontier: cost = |bearing| + 0.1*dist − 0.3*width
-            // Prefer forward + nearby + wide openings
+            // Select best frontier: cost = |bearing| + 0.25*dist − 0.3*width + peer_penalty
+            // Prefer forward + nearby + wide openings; penalize frontiers near peer positions.
             double best_angle = 0.0;
             double best_cost  = std::numeric_limits<double>::max();
             double best_fx = 0.0, best_fy = 0.0;
@@ -348,7 +348,18 @@ private:
                     const double raw  = std::atan2(dy, dx) - pose_.yaw;
                     const double ang  = std::atan2(std::sin(raw), std::cos(raw));
                     const double dist = std::hypot(dx, dy);
-                    const double cost = std::abs(ang) + 0.1 * dist - 0.3 * f.width;
+                    double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+
+                    // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
+                    const double avoid_r = dup_r_ * 2.0;
+                    for (const auto& [peer_ns, hist] : peer_histories_) {
+                        if (hist.empty()) continue;
+                        const auto& p  = hist.back();
+                        const double d = std::hypot(f.x - p.x, f.y - p.y);
+                        if (d < avoid_r)
+                            cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
+                    }
+
                     if (cost < best_cost) {
                         best_cost  = cost;
                         best_angle = ang;
