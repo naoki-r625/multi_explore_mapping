@@ -247,13 +247,7 @@ private:
             // 距離の計算（安全のため最小値を0.1mに制限）
             double dist = std::max(0.1, std::hypot(f.centroid_x - robot_x, f.centroid_y - robot_y));
             
-            // ─── 【修正案】新しいスコア評価式 ───
-            // 距離が遠くなるほど、potential_scaleによるペナルティが「2乗」で効くようになります。
-            // これにより、目の前にある小さなフロンティア(sizeが小さくてもdistが極小)が最優先されます。
-            f.score = (gain_scale_ * f.size) - (potential_scale_ * dist * dist);
-
-            // 【別案：より近くを徹底したい場合】分母に距離をかけるアプローチ
-            // f.score = (gain_scale_ * f.size) / dist; 
+            f.score = (gain_scale_ * f.size) - (potential_scale_ * dist);
 
             if (f.score > best_score) {
                 best_score = f.score;
@@ -280,7 +274,7 @@ private:
     }
 
     void send_nav_goal(double x, double y) {
-        if (!nav_client_->wait_for_action_server(std::chrono::seconds(1))) {
+        if (!nav_client_->action_server_is_ready()) {
             RCLCPP_WARN(this->get_logger(), "navigate_to_pose action server not available");
             return;
         }

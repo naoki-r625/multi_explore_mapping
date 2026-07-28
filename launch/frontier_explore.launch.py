@@ -80,10 +80,10 @@ def generate_launch_description():
     common_params = {
         'use_sim_time':      True,
         'global_frame':      'map',
-        'planner_frequency': 1.0,
-        'progress_timeout':  30.0,
+        'planner_frequency': 2.0,
+        'progress_timeout':  90.0,
         'min_frontier_size': 0.3,
-        'potential_scale':   1.0,
+        'potential_scale':   0.5,
         'gain_scale':        3.0,
         'visualize':         True,
         'blacklist_radius':  1.0,
