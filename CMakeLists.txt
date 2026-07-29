@@ -98,6 +98,32 @@ ament_target_dependencies(icp_map_matching_node
   cv_bridge
 )
 
+# 4. Sensor Move-Base Explore Node (Nav2 action-based, same frontier algorithm)
+add_executable(sensor_mb_explore_node
+  src/sensor_mb_explore_node.cpp
+  src/sensor_processor.cpp
+  src/vfh_avoidance.cpp
+  src/cluster_detector.cpp
+)
+ament_target_dependencies(sensor_mb_explore_node
+  rclcpp
+  rclcpp_action
+  geometry_msgs
+  sensor_msgs
+  nav_msgs
+  nav2_msgs
+  visualization_msgs
+  tf2_ros
+  tf2_geometry_msgs
+)
+target_include_directories(sensor_mb_explore_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  ${PCL_INCLUDE_DIRS}
+)
+target_link_libraries(sensor_mb_explore_node
+  ${PCL_LIBRARIES}
+)
+
 add_executable(frontier_explore_node src/frontier_explore_node.cpp)
 ament_target_dependencies(frontier_explore_node
   rclcpp
@@ -113,6 +139,7 @@ ament_target_dependencies(frontier_explore_node
 # ==================== Install ====================
 install(TARGETS
   sensor_explore_node
+  sensor_mb_explore_node
   explore_supervisor
   icp_map_matching_node
   frontier_explore_node

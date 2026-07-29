@@ -93,7 +93,7 @@ def launch_setup(context, *args, **kwargs):
                     'use_sim_time': True,
                     'frame_prefix': f'{ns}/',
                     'robot_description': open(urdf_path).read(),
-                }]
+                }],
             )
         )
 
@@ -177,7 +177,7 @@ def launch_setup(context, *args, **kwargs):
                 }],
                 remappings=[
                     ('/map', f'/{ns}/map'),
-                    ('/map_metadata', f'/{ns}/map_metadata')
+                    ('/map_metadata', f'/{ns}/map_metadata'),
                 ]
             )
         )
