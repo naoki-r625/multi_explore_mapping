@@ -113,6 +113,7 @@ private:
     rclcpp::Time last_blacklist_clear_;
     geometry_msgs::msg::PoseStamped current_goal_;
     std::shared_ptr<GoalHandleNav> current_goal_handle_;
+    uint64_t current_goal_seq_ = 0;  // cancel後の古いcallbackを無視するためのシーケンス番号
 
     // 到達失敗したフロンティアのブラックリスト
     std::vector<std::pair<double,double>> blacklist_;
@@ -246,8 +247,10 @@ private:
 
             // 距離の計算（安全のため最小値を0.1mに制限）
             double dist = std::max(0.1, std::hypot(f.centroid_x - robot_x, f.centroid_y - robot_y));
-            
-            f.score = (gain_scale_ * f.size) - (potential_scale_ * dist);
+
+            // sizeをそのまま使うと外壁など巨大フロンティアが距離ペナルティを圧倒する。
+            // log(1+size) でスケールを抑制し、近くの中型フロンティアも競争できるようにする。
+            f.score = (gain_scale_ * std::log(1.0 + f.size)) - (potential_scale_ * dist);
 
             if (f.score > best_score) {
                 best_score = f.score;
@@ -287,10 +290,14 @@ private:
         goal_msg.pose.pose.orientation.w = 1.0;
         current_goal_ = goal_msg.pose;
 
+        // シーケンス番号をインクリメント: 古いゴールのcallbackを無視するため
+        uint64_t seq = ++current_goal_seq_;
+
         auto opts = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
 
         opts.goal_response_callback =
-            [this](const GoalHandleNav::SharedPtr &gh) {
+            [this, seq](const GoalHandleNav::SharedPtr &gh) {
+                if (seq != current_goal_seq_) return;  // 古いゴールのcallbackを無視
                 if (!gh) {
                     RCLCPP_WARN(this->get_logger(), "Goal rejected by Nav2, will retry");
                     state_ = State::IDLE;
@@ -300,7 +307,13 @@ private:
             };
 
         opts.result_callback =
-            [this](const GoalHandleNav::WrappedResult &res) {
+            [this, seq](const GoalHandleNav::WrappedResult &res) {
+                if (seq != current_goal_seq_) {
+                    // cancel後に新ゴールが送信済みのため、このcallbackは無視する
+                    RCLCPP_DEBUG(this->get_logger(), "Stale result callback ignored (seq %lu != %lu)",
+                        seq, current_goal_seq_);
+                    return;
+                }
                 switch (res.code) {
                     case rclcpp_action::ResultCode::SUCCEEDED:
                         RCLCPP_INFO(this->get_logger(), "Reached target frontier!");

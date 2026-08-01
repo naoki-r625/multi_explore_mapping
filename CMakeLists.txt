@@ -136,6 +136,15 @@ ament_target_dependencies(frontier_explore_node
   visualization_msgs
   )
 
+# 5. Ghost Filter Node (他ロボットをスキャンから除去してSLAMゴーストを防ぐ)
+add_executable(ghost_filter_node src/ghost_filter_node.cpp)
+ament_target_dependencies(ghost_filter_node
+  rclcpp
+  sensor_msgs
+  tf2_ros
+  tf2_geometry_msgs
+)
+
 # ==================== Install ====================
 install(TARGETS
   sensor_explore_node
@@ -143,6 +152,7 @@ install(TARGETS
   explore_supervisor
   icp_map_matching_node
   frontier_explore_node
+  ghost_filter_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

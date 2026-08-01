@@ -63,6 +63,8 @@ def launch_setup(context, *args, **kwargs):
     SPAWN_START    = 2.0   # [s] wait for Gazebo to finish loading the world
     SPAWN_INTERVAL = 1.0   # [s] gap between each robot's spawn + SLAM start
 
+    all_namespaces = [r[0] for r in robots]
+
     for i, (ns, model, x, y, yaw) in enumerate(robots):
         # SDFモデルの動的書き換え
         sdf_path = os.path.join(pkg_tb3_gazebo, 'models', f'turtlebot3_{model}', 'model.sdf')
@@ -108,6 +110,23 @@ def launch_setup(context, *args, **kwargs):
             )
         )
 
+        # 他ロボットをスキャンから除去するゴーストフィルター
+        peer_ns = [n for n in all_namespaces if n != ns]
+        per_robot.append(
+            Node(
+                package='multi_explore_mapping',
+                executable='ghost_filter_node',
+                name='ghost_filter',
+                namespace=ns,
+                output='screen',
+                parameters=[{
+                    'use_sim_time': True,
+                    'peer_namespaces': peer_ns,
+                    'mask_radius': 0.3,
+                }],
+            )
+        )
+
         # Gazeboへのスポーン
         per_robot.append(
             Node(
@@ -137,7 +156,7 @@ def launch_setup(context, *args, **kwargs):
                     'base_frame': f'{ns}/base_footprint',
                     'odom_frame': f'{ns}/odom',
                     'map_frame': f'{ns}/map',
-                    'scan_topic': f'/{ns}/scan',
+                    'scan_topic': f'/{ns}/scan_filtered',
                     'mode': 'mapping',
                     'transform_timeout': 0.2,
                     'minimum_time_interval': 0.1,
