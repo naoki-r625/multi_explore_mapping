@@ -36,6 +36,15 @@
   <exec_depend>turtlebot3_gazebo</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+
+  <!--
+    world_type:=rmf を使う場合のみ必要。rmf_demos は Humble ではバイナリ配布が
+    無くソースビルドが前提のため、rosdep が解決できるよう任意依存にしてある。
+    詳細は docs/rmf_demos_setup.md を参照。
+  -->
+  <!-- <exec_depend>rmf_demos_maps</exec_depend> -->
+  <!-- <exec_depend>rmf_demos_assets</exec_depend> -->
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

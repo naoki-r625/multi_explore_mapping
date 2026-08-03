@@ -166,7 +166,14 @@ install(DIRECTORY
   worlds
   models
   config
+  scripts
   DESTINATION share/${PROJECT_NAME}/
+)
+
+# launch から import する / ros2 run で直接叩けるようにする
+install(PROGRAMS
+  scripts/rmf_world_tools.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # ==================== Testing ====================

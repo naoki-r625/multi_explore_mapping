@@ -1,49 +1,174 @@
+import glob
 import os
+import sys
 import tempfile
+
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction, DeclareLaunchArgument, OpaqueFunction
+from launch.actions import IncludeLaunchDescription, TimerAction, DeclareLaunchArgument, OpaqueFunction, LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 
+# aws / custom ワールド用の既定スポーン配置 (先頭 num_robots 台を使う)
+DEFAULT_ROBOT_POSES = [
+    (0.0,  2.0, 0.0),
+    (0.0, -2.0, 0.0),
+    (2.0,  0.0, 0.0),
+    (-2.0, 0.0, 0.0),
+    (2.0,  2.0, 0.0),
+    (2.0, -2.0, 0.0),
+]
+
+
+def _prepend_env(var, paths):
+    """環境変数の先頭にパスを足す (重複は除く)。"""
+    paths = [p for p in paths if p]
+    if not paths:
+        return
+    existing = [p for p in os.environ.get(var, '').split(':') if p]
+    merged = paths + [p for p in existing if p not in paths]
+    os.environ[var] = ':'.join(merged)
+
+
+def _load_rmf_tools(pkg_my_mapping):
+    """share/<pkg>/scripts/rmf_world_tools.py を import する。"""
+    scripts_dir = os.path.join(pkg_my_mapping, 'scripts')
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import rmf_world_tools  # noqa: E402
+    return rmf_world_tools
+
+
+def _setup_rmf_world(context, pkg_my_mapping, logs):
+    """
+    rmf_demos のワールドを使えるように前処理する。
+
+    Returns: (world_path, robot_poses or None)
+    """
+    rmf_world = LaunchConfiguration('rmf_world').perform(context)
+    map_package = LaunchConfiguration('rmf_map_package').perform(context)
+    open_doors = LaunchConfiguration('open_doors').perform(context).lower() in ('1', 'true', 'yes')
+    spawn_mode = LaunchConfiguration('spawn_mode').perform(context)
+    spawn_min_sep = float(LaunchConfiguration('spawn_min_sep').perform(context))
+    num_robots = int(LaunchConfiguration('num_robots').perform(context))
+
+    tools = _load_rmf_tools(pkg_my_mapping)
+    paths = tools.world_paths(rmf_world, map_package)
+
+    if not os.path.isfile(paths['world']):
+        raise RuntimeError(
+            f"rmf_demos のワールドが見つかりません: {paths['world']}\n"
+            "  rmf_demos_maps はビルド時に .world を生成します。\n"
+            "  rmf_demos をソースビルドして setup.bash を source してください。")
+
+    # --- Gazebo の探索パス -------------------------------------------------
+    gazebo_share = None
+    for cand in sorted(glob.glob('/usr/share/gazebo-*'), reverse=True):
+        if os.path.isdir(cand):
+            gazebo_share = cand
+            break
+
+    model_dirs = tools.model_dirs(rmf_world, map_package)
+    if gazebo_share:
+        model_dirs.append(os.path.join(gazebo_share, 'models'))
+    _prepend_env('GAZEBO_MODEL_PATH', model_dirs)
+
+    resource_dirs = tools.resource_dirs()
+    if gazebo_share:
+        resource_dirs.append(gazebo_share)
+    _prepend_env('GAZEBO_RESOURCE_PATH', resource_dirs)
+
+    # RMF プラグインがあれば読めるようにしておく (open_doors:=false のとき用)
+    plugin_dirs = []
+    for pkg, sub in (('rmf_robot_sim_gz_classic_plugins', 'lib/rmf_robot_sim_gz_classic_plugins'),
+                     ('rmf_building_sim_gz_classic_plugins', 'lib/rmf_building_sim_gz_classic_plugins')):
+        try:
+            from ament_index_python.packages import get_package_prefix
+            plugin_dirs.append(os.path.join(get_package_prefix(pkg), sub))
+        except Exception:
+            pass
+    _prepend_env('GAZEBO_PLUGIN_PATH', plugin_dirs)
+
+    # オンラインモデルDBへの問い合わせで固まるのを防ぐ
+    os.environ['GAZEBO_MODEL_DATABASE_URI'] = ''
+
+    # --- ワールドの前処理 ---------------------------------------------------
+    world_path = paths['world']
+    if open_doors:
+        out_dir = os.path.join(tempfile.gettempdir(), 'multi_explore_mapping_worlds')
+        world_path = os.path.join(out_dir, f'{rmf_world}_open.world')
+        report = tools.sanitize_world(
+            paths['world'], world_path,
+            search_dirs=tools.model_dirs(rmf_world, map_package))
+        logs.append(LogInfo(msg=(
+            f"[rmf] {rmf_world}: ドア {len(report['doors'])} / リフト {len(report['lifts'])} / "
+            f"RMFロボット {len(report['robots'])} / worldプラグイン {len(report['world_plugins'])} を除去 "
+            f"-> {world_path}")))
+    else:
+        logs.append(LogInfo(msg=f'[rmf] {rmf_world}: 元のワールドをそのまま使用 (ドアは閉じたまま)'))
+
+    # --- スポーン位置 -------------------------------------------------------
+    poses = tools.spawn_poses(rmf_world, map_package, num_robots, spawn_mode, spawn_min_sep)
+    if poses and len(poses) < num_robots:
+        logs.append(LogInfo(msg=(
+            f'[rmf] nav_graph から {len(poses)} 点しか取得できませんでした '
+            f'(要求 {num_robots} 台)。spawn_min_sep を小さくするか spawn_mode:=spread を試してください。'
+            ' 既定座標にフォールバックします。')))
+        poses = None
+    if poses:
+        logs.append(LogInfo(msg=(
+            f"[rmf] nav_graph から {len(poses)} 台分のスポーン位置を取得 (mode={spawn_mode}): "
+            + ', '.join(f'({x:.1f}, {y:.1f})' for x, y, _ in poses))))
+    else:
+        logs.append(LogInfo(msg=(
+            '[rmf] nav_graph からスポーン位置を取得できませんでした。'
+            ' 既定座標を使います (PyYAML 未導入 or nav_graphs 未生成)')))
+        poses = None
+
+    return world_path, poses
+
+
 def launch_setup(context, *args, **kwargs):
-    #
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
     pkg_tb3_gazebo = get_package_share_directory('turtlebot3_gazebo')
     pkg_my_mapping = get_package_share_directory('multi_explore_mapping')
 
-    #
     world_type = LaunchConfiguration('world_type').perform(context)
+    num_robots = int(LaunchConfiguration('num_robots').perform(context))
+    robot_model = LaunchConfiguration('robot_model').perform(context)
 
-    #
-    if 'GAZEBO_MODEL_PATH' in os.environ:
-        os.environ['GAZEBO_MODEL_PATH'] += f":{pkg_my_mapping}"
-    else:
-        os.environ['GAZEBO_MODEL_PATH'] = pkg_my_mapping
+    logs = []
 
-    #
-    common_robots = [
-        ('robot_1', 'burger', 0.0,  2.0, 0.0),
-        ('robot_2', 'burger', 0.0, -2.0, 0.0),
-        #('robot_3', 'burger', 2.0,  0.0, 0.0),
-        #('robot_4', 'burger',-2.0,  0.0, 0.0),
-        #('robot_5', 'burger', 2.0,  2.0, 0.0),
-        #('robot_6', 'burger', 2.0, -2.0, 0.0),
-    ]
+    # 自作モデル (my_custom_model) を探索対象に入れる
+    _prepend_env('GAZEBO_MODEL_PATH', [pkg_my_mapping])
 
+    # ------------------------------------------------------------------
+    # ワールドの選択
+    # ------------------------------------------------------------------
+    poses = None
     if world_type == 'custom':
         world_path = os.path.join(pkg_my_mapping, 'worlds', 'my_custom_room.world')
-        robots = common_robots
-    else:
+    elif world_type == 'rmf':
+        world_path, poses = _setup_rmf_world(context, pkg_my_mapping, logs)
+    else:  # 'aws'
         world_path = os.path.join(
             get_package_share_directory('aws_robomaker_small_warehouse_world'),
             'worlds', 'no_roof_small_warehouse', 'no_roof_small_warehouse.world'
         )
-        robots = common_robots
 
-    # 1. Gazebo Server の起動 (AWS Warehouseワールド)
+    if poses is None:
+        poses = DEFAULT_ROBOT_POSES[:num_robots]
+        if len(poses) < num_robots:
+            raise RuntimeError(
+                f'num_robots={num_robots} 台分の既定スポーン座標がありません '
+                f'(最大 {len(DEFAULT_ROBOT_POSES)})')
+
+    robots = [(f'robot_{i + 1}', robot_model, x, y, yaw)
+              for i, (x, y, yaw) in enumerate(poses)]
+
+    # 1. Gazebo Server
     gzserver = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
@@ -51,7 +176,7 @@ def launch_setup(context, *args, **kwargs):
         launch_arguments={'world': world_path}.items()
     )
 
-    # 2. Gazebo Client (GUI) の起動
+    # 2. Gazebo Client (GUI)
     gzclient = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
@@ -62,6 +187,10 @@ def launch_setup(context, *args, **kwargs):
 
     SPAWN_START    = 2.0   # [s] wait for Gazebo to finish loading the world
     SPAWN_INTERVAL = 1.0   # [s] gap between each robot's spawn + SLAM start
+
+    # rmf_demos のワールドはロード自体が重いので待ち時間を伸ばす
+    if world_type == 'rmf':
+        SPAWN_START = 15.0
 
     all_namespaces = [r[0] for r in robots]
 
@@ -226,20 +355,57 @@ def launch_setup(context, *args, **kwargs):
         )
 
     return [
+        *logs,
         gzserver,
         gzclient,
         *static_tf_nodes,   # static_tf を先に起動
-        *robot_timers,      # robot_1: 5s, robot_2: 9s, ..., robot_6: 25s
+        *robot_timers,
     ]
+
 
 def generate_launch_description():
     return LaunchDescription([
-        # 引数の宣言 (aws か custom を指定可能。デフォルトは aws)
         DeclareLaunchArgument(
             'world_type',
             default_value='aws',
-            description='Select world environment: [aws, custom]'
+            description='Select world environment: [aws, custom, rmf]'
         ),
-        # 上記の関数をコンテキスト付きで呼び出す
+        DeclareLaunchArgument(
+            'rmf_world',
+            default_value='airport_terminal',
+            description='world_type:=rmf のときの rmf_demos ワールド名 '
+                        '[airport_terminal, office, campus, hotel, clinic]'
+        ),
+        DeclareLaunchArgument(
+            'rmf_map_package',
+            default_value='rmf_demos_maps',
+            description='rmf_demos のマップパッケージ名'
+        ),
+        DeclareLaunchArgument(
+            'open_doors',
+            default_value='true',
+            description='RMF のドア/リフト/ロボットを world から除去して常時開放にする'
+        ),
+        DeclareLaunchArgument(
+            'num_robots',
+            default_value='2',
+            description='スポーンするロボット台数'
+        ),
+        DeclareLaunchArgument(
+            'robot_model',
+            default_value='burger',
+            description='TurtleBot3 モデル [burger, waffle, waffle_pi]'
+        ),
+        DeclareLaunchArgument(
+            'spawn_mode',
+            default_value='cluster',
+            description='rmf ワールドでのスポーン配置 '
+                        '[cluster: 近接スタート(地図マージ向き) | spread: 分散スタート]'
+        ),
+        DeclareLaunchArgument(
+            'spawn_min_sep',
+            default_value='1.5',
+            description='cluster モードでのロボット間最小距離 [m]'
+        ),
         OpaqueFunction(function=launch_setup)
     ])
