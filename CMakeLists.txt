@@ -92,6 +92,7 @@ target_link_libraries(icp_map_matching_node
 ament_target_dependencies(icp_map_matching_node
   rclcpp
   nav_msgs
+  sensor_msgs
   geometry_msgs
   tf2_ros
   tf2_geometry_msgs
@@ -173,6 +174,7 @@ install(DIRECTORY
 # launch から import する / ros2 run で直接叩けるようにする
 install(PROGRAMS
   scripts/rmf_world_tools.py
+  scripts/explore_mode_monitor.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

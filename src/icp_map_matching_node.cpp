@@ -1,5 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <opencv2/opencv.hpp>
 #include <Eigen/Dense>
 #include "multi_explore_mapping/icp.hpp"
@@ -10,6 +12,7 @@
 #include <unordered_map>
 
 using OccupancyGrid = nav_msgs::msg::OccupancyGrid;
+using PointCloud2   = sensor_msgs::msg::PointCloud2;
 
 class ICPMapMatchingNode : public rclcpp::Node {
 public:
@@ -37,6 +40,12 @@ public:
 
         map_pub_ = create_publisher<OccupancyGrid>(
             "/map", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local());
+
+        // ボクセルグリッドで均一化した特徴点群を RViz 確認用に配信
+        pub_features_1_ = create_publisher<PointCloud2>(
+            "/icp_matching/robot_1_features", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local());
+        pub_features_2_ = create_publisher<PointCloud2>(
+            "/icp_matching/robot_2_features", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local());
 
         sub_map_1_ = create_subscription<OccupancyGrid>(
             "/robot_1/map",
@@ -117,6 +126,30 @@ private:
         for (const auto& [k, vc] : cells)
             result.row(i++) = (vc.first / static_cast<float>(vc.second)).transpose();
         return result;
+    }
+
+    // Nx2 の特徴点行列を RViz 表示用の PointCloud2 (z=0, frame_id="map") に変換
+    PointCloud2 to_point_cloud2(const Eigen::MatrixXf& pts, const rclcpp::Time& stamp) {
+        PointCloud2 cloud;
+        cloud.header.frame_id = "map";
+        cloud.header.stamp    = stamp;
+        cloud.height    = 1;
+        cloud.is_bigendian = false;
+        cloud.is_dense     = true;
+
+        sensor_msgs::PointCloud2Modifier modifier(cloud);
+        modifier.setPointCloud2FieldsByString(1, "xyz");
+        modifier.resize(pts.rows());
+
+        sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
+        sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
+        sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
+        for (int i = 0; i < pts.rows(); ++i, ++iter_x, ++iter_y, ++iter_z) {
+            *iter_x = pts(i, 0);
+            *iter_y = pts(i, 1);
+            *iter_z = 0.0f;
+        }
+        return cloud;
     }
 
     // OccupancyGrid を factor 倍粗いグリッドに縮小する。
@@ -379,6 +412,10 @@ private:
             "World-frame feature points (voxel-filtered): robot_1=%ld, robot_2=%ld",
             pts1.rows(), pts2.rows());
 
+        const auto feature_stamp = now();
+        pub_features_1_->publish(to_point_cloud2(pts1, feature_stamp));
+        pub_features_2_->publish(to_point_cloud2(pts2, feature_stamp));
+
         // マージ用ダウンサンプル済みマップ (フォールバック含む全 merge_and_publish で共用)
         const int merge_factor = (int)get_parameter("map_downsample_factor").as_int();
         const auto map1_ds = downsample(map1, merge_factor);
@@ -441,6 +478,8 @@ private:
     }
 
     rclcpp::Publisher<OccupancyGrid>::SharedPtr     map_pub_;
+    rclcpp::Publisher<PointCloud2>::SharedPtr       pub_features_1_;
+    rclcpp::Publisher<PointCloud2>::SharedPtr       pub_features_2_;
     rclcpp::Subscription<OccupancyGrid>::SharedPtr  sub_map_1_;
     rclcpp::Subscription<OccupancyGrid>::SharedPtr  sub_map_2_;
     rclcpp::TimerBase::SharedPtr                    timer_;
