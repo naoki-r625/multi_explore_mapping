@@ -8,6 +8,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include "multi_explore_mapping/voronoi_partition.hpp"
 
 #include <vector>
 #include <queue>
@@ -38,6 +39,7 @@ public:
         this->declare_parameter<bool>("visualize", true);
         this->declare_parameter<double>("blacklist_radius", 1.0);
         this->declare_parameter<double>("blacklist_clear_sec", 60.0);
+        this->declare_parameter<bool>("use_voronoi_partition", true);
 
         robot_base_frame_  = this->get_parameter("robot_base_frame").as_string();
         global_frame_      = this->get_parameter("global_frame").as_string();
@@ -49,6 +51,7 @@ public:
         visualize_         = this->get_parameter("visualize").as_bool();
         blacklist_radius_  = this->get_parameter("blacklist_radius").as_double();
         blacklist_clear_sec_ = this->get_parameter("blacklist_clear_sec").as_double();
+        use_voronoi_        = this->get_parameter("use_voronoi_partition").as_bool();
         std::string map_topic = this->get_parameter("map_topic").as_string();
 
         // 統合コストマップをサブスクライブ
@@ -57,6 +60,17 @@ public:
             rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
             std::bind(&FrontierExplorerNode::map_callback, this, std::placeholders::_1)
         );
+
+        // ボロノイ担当領域マスク（voronoi_partition_node が配信）。
+        // 相対トピック名なので、名前空間 robot_i 下では自動的に
+        // /robot_i/voronoi_mask に解決される。
+        if (use_voronoi_) {
+            voronoi_mask_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+                "voronoi_mask",
+                rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
+                [this](nav_msgs::msg::OccupancyGrid::SharedPtr msg) { voronoi_mask_ = msg; }
+            );
+        }
 
         if (visualize_) {
             frontier_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
@@ -105,9 +119,11 @@ private:
     bool visualize_;
     double blacklist_radius_;
     double blacklist_clear_sec_;
+    bool use_voronoi_;
 
     nav_msgs::msg::OccupancyGrid::SharedPtr current_map_;
     bool map_updated_ = false;
+    nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
 
     rclcpp::Time last_progress_time_;
     rclcpp::Time last_blacklist_clear_;
@@ -122,6 +138,7 @@ private:
     tf2_ros::TransformListener tf_listener_;
 
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr voronoi_mask_sub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_publisher_;
     rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
     rclcpp::TimerBase::SharedPtr timer_;
@@ -221,8 +238,25 @@ private:
                 sum_y += oy + (c.y + 0.5) * res;
             }
             double n = static_cast<double>(cluster.cells.size());
-            cluster.centroid_x = sum_x / n;
-            cluster.centroid_y = sum_y / n;
+            double mean_x = sum_x / n;
+            double mean_y = sum_y / n;
+
+            // 幾何重心は凹形状クラスタ(角を回り込む・壁沿いに湾曲する等)だと
+            // クラスタのどのセルとも一致せず、未知領域や障害物寄りに落ちて
+            // 非到達なナビゲーション目標になりうる。重心に最も近い実際の
+            // フロンティアセルにスナップすることで、必ず既知かつ走行可能な
+            // セルをゴールにする。
+            double best_d2 = std::numeric_limits<double>::infinity();
+            double snap_x = mean_x, snap_y = mean_y;
+            for (const auto &c : cluster.cells) {
+                double wx = ox + (c.x + 0.5) * res;
+                double wy = oy + (c.y + 0.5) * res;
+                double d2 = (wx - mean_x) * (wx - mean_x) + (wy - mean_y) * (wy - mean_y);
+                if (d2 < best_d2) { best_d2 = d2; snap_x = wx; snap_y = wy; }
+            }
+
+            cluster.centroid_x = snap_x;
+            cluster.centroid_y = snap_y;
             cluster.size       = n * res;
             cluster.score      = 0.0;
             clusters.push_back(cluster);
@@ -237,13 +271,19 @@ private:
         return false;
     }
 
-    Frontier* select_best_frontier(std::vector<Frontier> &frontiers, double robot_x, double robot_y) {
+    // respect_territory=true のときは、自分のボロノイセル外
+    // （voronoi_mask の値が 50/100 でない候補）を選択肢から除外する。
+    Frontier* select_best_frontier(std::vector<Frontier> &frontiers, double robot_x, double robot_y,
+                                   bool respect_territory) {
         Frontier *best = nullptr;
         double best_score = -std::numeric_limits<double>::infinity();
 
         for (auto &f : frontiers) {
             if (f.size < min_frontier_size_) continue;
             if (is_blacklisted(f.centroid_x, f.centroid_y)) continue;
+            if (respect_territory && voronoi_mask_ &&
+                !voronoi::in_own_territory(*voronoi_mask_, f.centroid_x, f.centroid_y))
+                continue;
 
             // 距離の計算（安全のため最小値を0.1mに制限）
             double dist = std::max(0.1, std::hypot(f.centroid_x - robot_x, f.centroid_y - robot_y));
@@ -256,6 +296,23 @@ private:
                 best_score = f.score;
                 best       = &f;
             }
+        }
+        return best;
+    }
+
+    // ボロノイ制約ありで探して見つからなければ、制約なしにフォールバック
+    // する（自分のセルにフロンティアが1つも残っていない場合の逃げ道）。
+    Frontier* select_frontier_with_fallback(std::vector<Frontier> &frontiers,
+                                            double robot_x, double robot_y) {
+        if (!use_voronoi_ || !voronoi_mask_)
+            return select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/false);
+
+        Frontier *best = select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/true);
+        if (!best) {
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
+                "No frontier inside own Voronoi territory — falling back to global best "
+                "until next partition recompute");
+            best = select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/false);
         }
         return best;
     }
@@ -476,9 +533,9 @@ private:
 
             // フロンティアが残っているなら、余計な再計画をせずに直進を維持
             if (current_frontier_still_exists) {
-                Frontier *best = select_best_frontier(frontiers, robot_x, robot_y);
+                Frontier *best = select_frontier_with_fallback(frontiers, robot_x, robot_y);
                 publish_frontiers(frontiers, best);
-                return; 
+                return;
             } else {
                 // 他のロボットに開拓されて消滅、あるいは障害物で埋まった場合は即座に次へ切り替え
                 RCLCPP_INFO(this->get_logger(), "Current target vanished or cleared by other robot. Replanning...");
@@ -488,7 +545,7 @@ private:
         // ──────────────────────────────────────
 
         // ベストなフロンティアを選択
-        Frontier *best = select_best_frontier(frontiers, robot_x, robot_y);
+        Frontier *best = select_frontier_with_fallback(frontiers, robot_x, robot_y);
 
         if (!best) {
             long valid_count = std::count_if(frontiers.begin(), frontiers.end(),

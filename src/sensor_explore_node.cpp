@@ -16,9 +16,13 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
-#include <nav_msgs/msg/odometry.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <multi_explore_mapping/sensor_processor.hpp>
+#include <multi_explore_mapping/voronoi_partition.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -30,7 +34,11 @@
 
 class SensorExploreNode : public rclcpp::Node {
 public:
-    SensorExploreNode() : Node("sensor_explore") {
+    SensorExploreNode()
+    : Node("sensor_explore"),
+      tf_buffer_(this->get_clock()),
+      tf_listener_(tf_buffer_)
+    {
         declare_parameter("linear_speed",    0.2);
         declare_parameter("angular_speed",   0.6);
         declare_parameter("safe_distance",   0.5);
@@ -44,6 +52,8 @@ public:
         declare_parameter("front_cone_deg", 30.0);
         declare_parameter("min_gap_width",   0.4);
         declare_parameter("odom_frame", std::string("odom"));
+        declare_parameter("global_frame", std::string("map"));
+        declare_parameter("use_voronoi_partition", true);
 
         lin_          = get_parameter("linear_speed").as_double();
         ang_          = get_parameter("angular_speed").as_double();
@@ -58,6 +68,8 @@ public:
         fcone_        = get_parameter("front_cone_deg").as_double();
         min_gap_w_    = get_parameter("min_gap_width").as_double();
         odom_frame_   = get_parameter("odom_frame").as_string();
+        global_frame_ = get_parameter("global_frame").as_string();
+        use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
@@ -65,13 +77,11 @@ public:
                 latest_scan_ = *m; has_scan_ = true;
             });
 
-        odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "odom", rclcpp::SensorDataQoS(),
-            [this](nav_msgs::msg::Odometry::SharedPtr m) { on_odom(*m); });
-
         cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
 
         ns_ = get_namespace();
+        robot_base_frame_ =
+            (!ns_.empty() && ns_.front() == '/' ? ns_.substr(1) : ns_) + "/base_footprint";
 
         // Multi-robot: pose trail (1 Hz)
         pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
@@ -96,6 +106,15 @@ public:
 
         viz_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
             "exploration_markers", rclcpp::SystemDefaultsQoS());
+
+        // ボロノイ担当領域マスク（voronoi_partition_node が配信）。
+        // 相対トピック名なので、名前空間下では自動的に <ns>/voronoi_mask に解決される。
+        if (use_voronoi_) {
+            voronoi_mask_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+                "voronoi_mask",
+                rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
+                [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { voronoi_mask_ = m; });
+        }
 
         timer_ = create_wall_timer(
             std::chrono::milliseconds(100),
@@ -123,6 +142,12 @@ private:
     double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
     double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
     std::string odom_frame_;
+    bool use_voronoi_;
+    nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
+    std::string global_frame_;
+    std::string robot_base_frame_;
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tf_listener_;
 
     sensor_msgs::msg::LaserScan latest_scan_;
     bool has_scan_ = false;
@@ -159,10 +184,10 @@ private:
     // ROS handles
 
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr      scan_sub_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr          odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  peer_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr    frontier_peer_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  target_sub_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     voronoi_mask_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr           cmd_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr       frontier_pub_;
@@ -174,24 +199,41 @@ private:
     rclcpp::TimerBase::SharedPtr viz_timer_;
 
     // ------------------------------------------------------------------
-    // Odometry
+    // World-frame pose (TF: global_frame_ -> robot_base_frame_)
+    //
+    // Uses TF rather than the raw /odom topic: /odom is dead-reckoning
+    // relative to each robot's own spawn point, not the shared "map" frame.
+    // Everything below (frontier_store_, the /shared_* topics consumed by
+    // peers, and the Voronoi territory check) compares positions across
+    // robots or against the merged map, so it needs a common frame.
 
-    void on_odom(const nav_msgs::msg::Odometry& msg) {
-        const double x = msg.pose.pose.position.x;
-        const double y = msg.pose.pose.position.y;
-        const auto& q = msg.pose.pose.orientation;
-        const double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
-                                      1.0 - 2.0 * (q.y * q.y + q.z * q.z));
-        pose_     = {x, y, yaw};
-        has_odom_ = true;
+    bool update_world_pose() {
+        try {
+            const auto tf = tf_buffer_.lookupTransform(
+                global_frame_, robot_base_frame_, tf2::TimePointZero, tf2::durationFromSec(0.1));
+            const auto& t = tf.transform.translation;
+            const auto& q = tf.transform.rotation;
+            pose_.x   = t.x;
+            pose_.y   = t.y;
+            pose_.yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                   1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+            has_odom_ = true;
 
-        const double t      = now().seconds();
-        const double cutoff = t - 600.0;
-        history_.push_back({x, y, t});
-        history_.erase(
-            std::remove_if(history_.begin(), history_.end(),
-                [cutoff](const OdomPt& p) { return p.t < cutoff; }),
-            history_.end());
+            const double t_now  = now().seconds();
+            const double cutoff = t_now - 600.0;
+            history_.push_back({pose_.x, pose_.y, t_now});
+            history_.erase(
+                std::remove_if(history_.begin(), history_.end(),
+                    [cutoff](const OdomPt& p) { return p.t < cutoff; }),
+                history_.end());
+            return true;
+        } catch (const tf2::TransformException& e) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                "TF %s -> %s unavailable: %s",
+                global_frame_.c_str(), robot_base_frame_.c_str(), e.what());
+            has_odom_ = false;
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -222,6 +264,13 @@ private:
         for (const auto& f : frontier_store_)
             if (std::hypot(wx - f.x, wy - f.y) < dup_r_ * 0.5) return;
         frontier_store_.push_back({wx, wy, now().seconds(), width});
+    }
+
+    // respect_territory=true のときのみボロノイセル外を弾く。マスク未受信、
+    // または use_voronoi_=false のときは常に true（制約なし）を返す。
+    bool in_own_territory(double wx, double wy, bool respect_territory) const {
+        if (!respect_territory || !use_voronoi_ || !voronoi_mask_) return true;
+        return voronoi::in_own_territory(*voronoi_mask_, wx, wy);
     }
 
     void prune_frontiers() {
@@ -312,6 +361,9 @@ private:
             return;
         }
 
+        update_world_pose();  // failure leaves has_odom_=false; pose-dependent
+                               // sections below already guard on has_odom_
+
         const auto ps = sensor_proc::process(
             latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_,
             robot_r_, fcone_, min_gap_w_);
@@ -339,35 +391,46 @@ private:
             double best_angle = 0.0;
             double best_cost  = std::numeric_limits<double>::max();
             double best_fx = 0.0, best_fy = 0.0;
+            bool   found = false;
 
             if (has_odom_) {
-                for (const auto& f : frontier_store_) {
-                    if (is_visited(f.x, f.y)) continue;
-                    const double dx   = f.x - pose_.x;
-                    const double dy   = f.y - pose_.y;
-                    const double raw  = std::atan2(dy, dx) - pose_.yaw;
-                    const double ang  = std::atan2(std::sin(raw), std::cos(raw));
-                    const double dist = std::hypot(dx, dy);
-                    double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+                // Pass 0: own Voronoi territory only. Pass 1 (escape hatch):
+                // no territory constraint — only runs if pass 0 found nothing,
+                // i.e. this robot's own cell currently has no candidate left.
+                for (int pass = 0; pass < 2 && !found; ++pass) {
+                    const bool respect_territory = (pass == 0);
+                    for (const auto& f : frontier_store_) {
+                        if (is_visited(f.x, f.y)) continue;
+                        if (!in_own_territory(f.x, f.y, respect_territory)) continue;
 
-                    // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
-                    const double avoid_r = dup_r_ * 2.0;
-                    for (const auto& [peer_ns, hist] : peer_histories_) {
-                        if (hist.empty()) continue;
-                        const auto& p  = hist.back();
-                        const double d = std::hypot(f.x - p.x, f.y - p.y);
-                        if (d < avoid_r)
-                            cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
-                    }
+                        const double dx   = f.x - pose_.x;
+                        const double dy   = f.y - pose_.y;
+                        const double raw  = std::atan2(dy, dx) - pose_.yaw;
+                        const double ang  = std::atan2(std::sin(raw), std::cos(raw));
+                        const double dist = std::hypot(dx, dy);
+                        double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
 
-                    if (cost < best_cost) {
-                        best_cost  = cost;
-                        best_angle = ang;
-                        best_fx    = f.x;
-                        best_fy    = f.y;
+                        // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
+                        const double avoid_r = dup_r_ * 2.0;
+                        for (const auto& [peer_ns, hist] : peer_histories_) {
+                            if (hist.empty()) continue;
+                            const auto& p  = hist.back();
+                            const double d = std::hypot(f.x - p.x, f.y - p.y);
+                            if (d < avoid_r)
+                                cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
+                        }
+
+                        if (cost < best_cost) {
+                            best_cost  = cost;
+                            best_angle = ang;
+                            best_fx    = f.x;
+                            best_fy    = f.y;
+                            found      = true;
+                        }
                     }
+                    if (!use_voronoi_ || !voronoi_mask_) break;  // no second pass needed
                 }
-                if (best_cost < std::numeric_limits<double>::max()) {
+                if (found) {
                     target_x_   = best_fx;
                     target_y_   = best_fy;
                     has_target_ = true;

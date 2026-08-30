@@ -36,6 +36,7 @@ SENSOR_PARAMS = {
     'dup_time':            600.0,
     'frontier_ttl':        300.0,
     'odom_frame': 'map',
+    'use_voronoi_partition': True,
 }
 
 FRONTIER_PARAMS = {
@@ -49,6 +50,7 @@ FRONTIER_PARAMS = {
     'visualize':         True,
     'blacklist_radius':  1.0,
     'blacklist_clear_sec': 60.0,
+    'use_voronoi_partition': True,
 }
 
 MONITOR_PARAMS = {
@@ -58,6 +60,25 @@ MONITOR_PARAMS = {
     'min_increase_cells': 300.0,  # 環境・地図解像度に応じて要調整
     'warmup_sec':         30.0,
     'sustained_checks':    3,
+}
+
+# voronoi_partition_node: 統合地図上でロボットごとの担当領域(Voronoi)を計算し、
+# /<robot>/voronoi_mask として配信する。センサーベース/フロンティアベース
+# どちらのフェーズでも、探査中のロボット位置を生成点として継続的に再計算する
+# ため、モード切替のタイミングとは独立に常時起動しておく(詳細は
+# docs/voronoi_partition.md)。
+VORONOI_PARAMS = {
+    'use_sim_time':          True,
+    'global_frame':          'map',
+    'base_frame_suffix':     'base_footprint',
+    'map_topic':              '/map',   # icp_map_matching_node が配信する統合地図
+    # icp_map_matching_node の overlap_filter_margin の既定値(2.0m)と揃えて
+    # いる。担当領域の境界に、常にICP対応点が取れるだけの重複帯を残すため。
+    # map_matching.launch.py で overlap_filter_margin を変更した場合はここも合わせる。
+    'buffer_width_m':          2.0,
+    'recompute_period_sec':    5.0,
+    'downsample_factor':         2,
+    'obstacle_threshold':       50,
 }
 
 # Nav2 用パラメータファイルは robot_1 / robot_2 分しか用意されていないため、
@@ -175,6 +196,18 @@ def generate_launch_description():
         parameters=[{**MONITOR_PARAMS, 'robot_names': [r for r, _ in ROBOTS]}],
     )
     launch_actions.append(monitor_node)
+
+    # ロボットの探査モード(センサー/フロンティア)に関係なく常時起動。
+    # 生成点はTF経由の現在位置なので、どちらのモードのロボットでも
+    # 自動的に担当領域の計算に参加する。
+    voronoi_node = Node(
+        package='multi_explore_mapping',
+        executable='voronoi_partition_node',
+        name='voronoi_partition',
+        output='screen',
+        parameters=[{**VORONOI_PARAMS, 'robot_names': [r for r, _ in ROBOTS]}],
+    )
+    launch_actions.append(voronoi_node)
 
     already_switched = set()
 

@@ -43,6 +43,19 @@ target_link_libraries(icp_lib
   ${OpenCV_LIBRARIES}
 )
 
+# Voronoi 担当領域分割ライブラリ (sensor_explore_node / frontier_explore_node /
+# voronoi_partition_node の3実行体から共通で使うため、実行体ごとにコンパイル
+# するのではなくライブラリとして共有する)
+add_library(voronoi_lib
+  src/voronoi_partition.cpp
+)
+target_include_directories(voronoi_lib PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+ament_target_dependencies(voronoi_lib
+  nav_msgs
+)
+
 # ==================== Build C++ Executables ====================
 
 # 1. Sensor Explore Node
@@ -67,6 +80,7 @@ target_include_directories(sensor_explore_node PRIVATE
 )
 target_link_libraries(sensor_explore_node
   ${PCL_LIBRARIES}
+  voronoi_lib
 )
 
 # 2. Explore Supervisor
@@ -136,6 +150,9 @@ ament_target_dependencies(frontier_explore_node
   tf2_geometry_msgs
   visualization_msgs
   )
+target_link_libraries(frontier_explore_node
+  voronoi_lib
+)
 
 # 5. Ghost Filter Node (他ロボットをスキャンから除去してSLAMゴーストを防ぐ)
 add_executable(ghost_filter_node src/ghost_filter_node.cpp)
@@ -146,6 +163,25 @@ ament_target_dependencies(ghost_filter_node
   tf2_geometry_msgs
 )
 
+# 6. Voronoi Partition Node (統合地図上でロボットごとの担当領域を計算・配信)
+add_executable(voronoi_partition_node
+  src/voronoi_partition_node.cpp
+)
+ament_target_dependencies(voronoi_partition_node
+  rclcpp
+  nav_msgs
+  geometry_msgs
+  visualization_msgs
+  tf2_ros
+  tf2_geometry_msgs
+)
+target_include_directories(voronoi_partition_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+target_link_libraries(voronoi_partition_node
+  voronoi_lib
+)
+
 # ==================== Install ====================
 install(TARGETS
   sensor_explore_node
@@ -154,6 +190,7 @@ install(TARGETS
   icp_map_matching_node
   frontier_explore_node
   ghost_filter_node
+  voronoi_partition_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
