@@ -46,6 +46,18 @@ private:
         auto out = *msg;
         const std::string& scan_frame = msg->header.frame_id;
 
+        // 実機のLiDARドライバはno-return(検出なし)をinfで返す(REP-117)のが
+        // 一般的だが、Gazebo classicのray sensorプラグインはrange_maxちょうど
+        // の数値をそのまま返す。slam_toolboxはこのrange_maxちょうどの値を
+        // 「確実にクリア」として扱わないため、センサー範囲内なのに永久に未知
+        // のまま残るセルができる。ここでinfに正規化して costmap/slam_toolbox
+        // 双方の既存レイトレーシングに正しく「range_maxまでクリア」と伝える。
+        for (auto& r : out.ranges) {
+            if (r >= out.range_max - 1e-3f) {
+                r = std::numeric_limits<float>::infinity();
+            }
+        }
+
         for (const auto& peer_ns : peer_namespaces_) {
             const std::string peer_frame = peer_ns + "/base_footprint";
             try {

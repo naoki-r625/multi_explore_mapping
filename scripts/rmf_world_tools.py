@@ -216,6 +216,39 @@ def sanitize_world(src_path: str,
     return report
 
 
+def point_camera_at(world_path: str, x: float, y: float, height: float = 20.0) -> None:
+    """
+    <world><gui><camera> の pose を (x, y) の真上から見下ろす姿勢に書き換える
+    (無ければ新規追加する)。
+
+    nav_graph 由来のスポーン地点は、world 作成者が想定したデフォルトカメラ位置
+    から大きく離れていることがある(例: airport_terminal はカメラが(40,-46)付近
+    を向いているのに、スポーン地点はnav_graphの重心である(147,-32)付近になる)。
+    そのままだとGazebo起動直後、ロボットが画面外にいて見つからない。
+    真上からの俯瞰にしておけば、どの向きのワールドでもスポーン地点が必ず画角に
+    収まる。
+    """
+    tree = ET.parse(world_path)
+    world = tree.getroot().find('world')
+    if world is None:
+        return
+
+    gui = world.find('gui')
+    if gui is None:
+        gui = ET.SubElement(world, 'gui')
+    camera = gui.find('camera')
+    if camera is None:
+        camera = ET.SubElement(gui, 'camera')
+        camera.set('name', 'gui_camera')
+    pose = camera.find('pose')
+    if pose is None:
+        pose = ET.SubElement(camera, 'pose')
+
+    # roll=0, pitch=90deg(真下向き), yaw=0
+    pose.text = f'{x:.3f} {y:.3f} {height:.3f} 0 1.5708 0'
+    tree.write(world_path, encoding='utf-8', xml_declaration=True)
+
+
 def inspect_world(src_path: str) -> dict:
     """除去せずに、どんな RMF 要素が入っているかだけ数える。"""
     tree = ET.parse(src_path)

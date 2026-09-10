@@ -1,0 +1,43 @@
+<!--
+  nav2_bt_navigator の既定BT(navigate_to_pose_w_replanning_and_recovery.xml)を
+  ベースに、到達不能なフロンティア目標を早く諦めるよう2箇所だけ変更したもの。
+  フロンティア選択は候補地点が実際に到達可能かを事前検証しないため、Nav2が
+  諦めるまでの時間がそのまま「選ばれたのに動き出さない」体感の長さになる。
+
+  変更点:
+    - NavigateRecovery の number_of_retries: 6 -> 2
+      (失敗のたびにリカバリ行動を繰り返す回数。既定の6回だと1目標あたり
+      十数秒かかることがある)
+    - Wait の wait_duration: 5 -> 1
+      (ラウンドロビンで回ってくるリカバリ行動の中で最も時間を食う)
+-->
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <RecoveryNode number_of_retries="2" name="NavigateRecovery">
+      <PipelineSequence name="NavigateWithReplanning">
+        <RateController hz="1.0">
+          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
+            <ComputePathToPose goal="{goal}" path="{path}" planner_id="GridBased"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </RecoveryNode>
+        </RateController>
+        <RecoveryNode number_of_retries="1" name="FollowPath">
+          <FollowPath path="{path}" controller_id="FollowPath"/>
+          <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+        </RecoveryNode>
+      </PipelineSequence>
+      <ReactiveFallback name="RecoveryFallback">
+        <GoalUpdated/>
+        <RoundRobin name="RecoveryActions">
+          <Sequence name="ClearingActions">
+            <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
+          </Sequence>
+          <Spin spin_dist="1.57"/>
+          <Wait wait_duration="1"/>
+          <BackUp backup_dist="0.30" backup_speed="0.05"/>
+        </RoundRobin>
+      </ReactiveFallback>
+    </RecoveryNode>
+  </BehaviorTree>
+</root>

@@ -48,6 +48,7 @@ public:
         declare_parameter<int>("downsample_factor", 2);
         declare_parameter<int>("obstacle_threshold", 50);
         declare_parameter<bool>("visualize", true);
+        declare_parameter<double>("hysteresis_margin_m", 1.5);
 
         robot_names_        = get_parameter("robot_names").as_string_array();
         base_frame_suffix_  = get_parameter("base_frame_suffix").as_string();
@@ -56,6 +57,7 @@ public:
         downsample_factor_  = std::max(1, static_cast<int>(get_parameter("downsample_factor").as_int()));
         obstacle_threshold_ = static_cast<int8_t>(get_parameter("obstacle_threshold").as_int());
         visualize_          = get_parameter("visualize").as_bool();
+        hysteresis_margin_m_ = get_parameter("hysteresis_margin_m").as_double();
 
         if (robot_names_.empty()) {
             RCLCPP_WARN(get_logger(),
@@ -88,9 +90,10 @@ public:
         schedule_next_cycle(1.0);  // let /map + TF warm up a little before the first attempt
 
         RCLCPP_INFO(get_logger(),
-            "voronoi_partition ready | robots=%zu buffer=%.2fm downsample=%d map_topic=%s visualize=%s",
-            robot_names_.size(), buffer_width_m_, downsample_factor_, map_topic.c_str(),
-            visualize_ ? "true" : "false");
+            "voronoi_partition ready | robots=%zu buffer=%.2fm hysteresis=%.2fm downsample=%d "
+            "map_topic=%s visualize=%s",
+            robot_names_.size(), buffer_width_m_, hysteresis_margin_m_, downsample_factor_,
+            map_topic.c_str(), visualize_ ? "true" : "false");
     }
 
 private:
@@ -161,8 +164,7 @@ private:
             return true;
         } catch (const tf2::TransformException& e) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000,
-                "TF lookup failed (%s -> %s): %s — skipping this robot this cycle",
-                global_frame_.c_str(), frame.c_str(), e.what());
+                "TF lookup failed (%s -> %s): %s", global_frame_.c_str(), frame.c_str(), e.what());
             return false;
         }
     }
@@ -179,12 +181,25 @@ private:
             return;
         }
 
+        // robot_names_ の並びを毎サイクル固定して robots[i] の i を安定させる
+        // (compute_partition の owner インデックスがこの i と一致するため、
+        // ヒステリシス比較が前回サイクルの同じロボットを正しく参照できる)。
+        // TFが一時的に取れない場合は最後にわかっている位置で埋め、その
+        // ロボットの担当領域が一瞬だけ消えて隣に明け渡される→揺り戻す、
+        // という余計な入れ替わりが起きないようにする。
         std::vector<voronoi::RobotPose> robots;
         robots.reserve(robot_names_.size());
         for (const auto& name : robot_names_) {
             double x = 0.0, y = 0.0;
-            if (lookup_robot_xy(name, x, y))
-                robots.push_back({name, x, y});
+            if (lookup_robot_xy(name, x, y)) {
+                last_known_pose_[name] = {x, y};
+            } else {
+                auto it = last_known_pose_.find(name);
+                if (it == last_known_pose_.end()) continue;  // まだ一度も見えていない
+                x = it->second.first;
+                y = it->second.second;
+            }
+            robots.push_back({name, x, y});
         }
         if (robots.empty()) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000,
@@ -194,7 +209,7 @@ private:
 
         const OccupancyGrid work_map = downsample(*map_ptr, downsample_factor_);
         const auto fields = voronoi::compute_partition(
-            work_map, robots, obstacle_threshold_);
+            work_map, robots, obstacle_threshold_, &prev_fields_, hysteresis_margin_m_);
 
         for (size_t i = 0; i < robots.size(); ++i) {
             auto it = mask_pubs_.find(robots[i].name);
@@ -212,6 +227,7 @@ private:
             static_cast<double>(work_map.info.resolution));
 
         publish_visualization(fields);
+        prev_fields_ = fields;
     }
 
     // ------------------------------------------------------------------
@@ -284,6 +300,7 @@ private:
     int    downsample_factor_;
     int8_t obstacle_threshold_;
     bool   visualize_;
+    double hysteresis_margin_m_;
 
     tf2_ros::Buffer           tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
@@ -295,6 +312,10 @@ private:
 
     OccupancyGrid::SharedPtr latest_map_;
     std::mutex                map_mutex_;
+
+    // ヒステリシス用の前回計算結果、およびTF瞬断時のフォールバック位置
+    voronoi::PartitionFields prev_fields_;
+    std::map<std::string, std::pair<double, double>> last_known_pose_;
 };
 
 int main(int argc, char* argv[]) {

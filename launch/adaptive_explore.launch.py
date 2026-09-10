@@ -79,6 +79,11 @@ VORONOI_PARAMS = {
     'recompute_period_sec':    5.0,
     'downsample_factor':         2,
     'obstacle_threshold':       50,
+    # 生存者バイアス: 前回サイクルの担当ロボットが、この差[m]より縮まらない
+    # 限りは他ロボットに明け渡さない。ロボット位置や新発見の通路次第で毎回の
+    # 最近傍計算だけだと担当領域が左右で入れ替わってしまうことがあるため、
+    # ちらつき・往復を抑える。0にすると旧来のヒステリシスなし挙動に戻る。
+    'hysteresis_margin_m':     1.5,
 }
 
 # Nav2 用パラメータファイルは robot_1 / robot_2 分しか用意されていないため、
@@ -91,6 +96,14 @@ ROBOTS = [
 
 def make_nav2_nodes(robot_name: str, params_file: str) -> list:
     """robot_name ネームスペース用の Nav2 ノード群を生成する。"""
+    # $(find-pkg-share ...) はNode(parameters=[path])のように素のパス文字列
+    # で渡したYAML内では展開されない(launch_rosのParameterFileがデフォルト
+    # allow_substs=Falseで包むため)。実パスはここでPythonで解決してから
+    # bt_navigatorにだけ追加パラメータとして渡す。
+    bt_xml_path = os.path.join(
+        get_package_share_directory('multi_explore_mapping'),
+        'config', 'nav2_bt_fast_fail.xml')
+
     return [
         Node(
             package='nav2_controller',
@@ -116,7 +129,7 @@ def make_nav2_nodes(robot_name: str, params_file: str) -> list:
             name='bt_navigator',
             namespace=robot_name,
             output='screen',
-            parameters=[params_file],
+            parameters=[params_file, {'default_nav_to_pose_bt_xml': bt_xml_path}],
             remappings=TF_REMAP,
         ),
         Node(

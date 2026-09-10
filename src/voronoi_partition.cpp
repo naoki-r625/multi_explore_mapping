@@ -93,10 +93,24 @@ std::vector<float> dijkstra_from(
 
 }  // namespace
 
+int8_t owner_at(const PartitionFields& fields, double wx, double wy) {
+    if (fields.width <= 0 || fields.height <= 0 || fields.resolution <= 0.0) return -1;
+
+    const int gx = static_cast<int>(std::floor((wx - fields.origin_x) / fields.resolution));
+    const int gy = static_cast<int>(std::floor((wy - fields.origin_y) / fields.resolution));
+    if (gx < 0 || gx >= fields.width || gy < 0 || gy >= fields.height) return -1;
+
+    const size_t idx = static_cast<size_t>(gy) * fields.width + static_cast<size_t>(gx);
+    if (idx >= fields.owner.size()) return -1;
+    return fields.owner[idx];
+}
+
 PartitionFields compute_partition(
     const nav_msgs::msg::OccupancyGrid& map,
     const std::vector<RobotPose>& robots,
-    int8_t obstacle_threshold)
+    int8_t obstacle_threshold,
+    const PartitionFields* previous,
+    double hysteresis_margin_m)
 {
     PartitionFields out;
     out.width      = static_cast<int>(map.info.width);
@@ -114,6 +128,8 @@ PartitionFields compute_partition(
     if (out.width <= 0 || out.height <= 0 || robots.empty() || out.resolution <= 0.0)
         return out;
 
+    const bool apply_hysteresis = (previous != nullptr) && (hysteresis_margin_m > 0.0);
+
     for (size_t r = 0; r < robots.size(); ++r) {
         const int gx = static_cast<int>(
             std::floor((robots[r].x - out.origin_x) / out.resolution));
@@ -123,7 +139,21 @@ PartitionFields compute_partition(
         const auto field = dijkstra_from(map, gx, gy, obstacle_threshold);
 
         for (size_t i = 0; i < N; ++i) {
-            const float d = field[i];
+            float d = field[i];
+
+            // Hysteresis: give the previous cycle's owner of this cell a
+            // discount so a challenger has to be genuinely closer (not just
+            // marginally, due to noise or a robot's position wobbling) to
+            // take it over. See compute_partition()'s doc comment.
+            if (apply_hysteresis) {
+                const int x = static_cast<int>(i % static_cast<size_t>(out.width));
+                const int y = static_cast<int>(i / static_cast<size_t>(out.width));
+                const double wx = out.origin_x + (x + 0.5) * out.resolution;
+                const double wy = out.origin_y + (y + 0.5) * out.resolution;
+                if (owner_at(*previous, wx, wy) == static_cast<int8_t>(r))
+                    d -= static_cast<float>(hysteresis_margin_m);
+            }
+
             if (d < out.dist_owner[i]) {
                 // Current owner demotes to second place.
                 out.dist_second[i]   = out.dist_owner[i];

@@ -15,6 +15,8 @@ from ament_index_python.packages import get_package_share_directory
 DEFAULT_ROBOT_POSES = [
     (0.0,  2.0, 0.0),
     (0.0, -2.0, 0.0),
+    #(-10.0,-10.0,0.0),
+    #(-10.0,-15.0,0.0),
     (2.0,  0.0, 0.0),
     (-2.0, 0.0, 0.0),
     (2.0,  2.0, 0.0),
@@ -126,6 +128,17 @@ def _setup_rmf_world(context, pkg_my_mapping, logs):
             '[rmf] nav_graph からスポーン位置を取得できませんでした。'
             ' 既定座標を使います (PyYAML 未導入 or nav_graphs 未生成)')))
         poses = None
+
+    # --- GUIカメラをスポーン地点へ ------------------------------------------
+    # open_doors:=false のときは world_path が元の(共有された)ワールドファイル
+    # そのものなので書き換えない。open_doors:=true (既定)のときだけ、サニタイズ
+    # 済みの自分専用コピーに対してカメラ位置を上書きする。
+    if open_doors and poses:
+        cx = sum(p[0] for p in poses) / len(poses)
+        cy = sum(p[1] for p in poses) / len(poses)
+        tools.point_camera_at(world_path, cx, cy)
+        logs.append(LogInfo(msg=(
+            f'[rmf] GUIカメラをスポーン地点付近 ({cx:.1f}, {cy:.1f}) の真上に移動しました')))
 
     return world_path, poses
 

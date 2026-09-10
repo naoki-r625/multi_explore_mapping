@@ -58,10 +58,32 @@ struct PartitionFields {
 // obstacle_threshold matches the convention used elsewhere in this package
 // (icp_map_matching_node, frontier detection): cell values >= this are
 // treated as obstacle/inflated and block propagation.
+//
+// `previous` + `hysteresis_margin_m` add optional stability across calls:
+// since ownership is otherwise recomputed from scratch every cycle from
+// live robot positions, two robots that happen to be roughly equidistant
+// from a region can flip which one owns it cycle to cycle (e.g. as they
+// move, or as a newly-discovered corridor changes the geodesic distance),
+// which sends whichever robot just lost that region backtracking toward
+// territory it had already covered. When `previous` is non-null and
+// `hysteresis_margin_m > 0`, a cell's previous owner (looked up in
+// `previous` by world coordinates, so this still works across recomputes
+// where the map's bounding box has grown/shifted) gets a discount of that
+// many metres on its distance, so a challenger must be closer by more than
+// the margin before territory actually changes hands. Pass
+// previous=nullptr (the default) to get the original stateless behaviour.
 PartitionFields compute_partition(
     const nav_msgs::msg::OccupancyGrid& map,
     const std::vector<RobotPose>& robots,
-    int8_t obstacle_threshold = 50);
+    int8_t obstacle_threshold = 50,
+    const PartitionFields* previous = nullptr,
+    double hysteresis_margin_m = 0.0);
+
+// Looks up the owning robot index recorded in `fields` at world position
+// (wx, wy). Returns -1 if that position falls outside fields' spatial
+// coverage or has no recorded owner there. Used to implement the
+// hysteresis bias in compute_partition() above.
+int8_t owner_at(const PartitionFields& fields, double wx, double wy);
 
 // Builds robot `robot_index`'s publishable territory mask from `fields`.
 // Cell values:

@@ -109,6 +109,11 @@ private:
     enum class State { IDLE, MOVING };
     State state_ = State::IDLE;
 
+    // 同じ(ように見える)ゴールがNav2に連続でrejectされた場合、進捗タイムアウト
+    // (MOVING状態でしか働かない)には引っかからずMOVING↔IDLEを高速に往復して
+    // しまう。N回連続rejectでブラックリストして抜け出す。
+    static constexpr int kMaxGoalRejects = 3;
+
     std::string robot_base_frame_;
     std::string global_frame_;
     double planner_frequency_;
@@ -130,6 +135,7 @@ private:
     geometry_msgs::msg::PoseStamped current_goal_;
     std::shared_ptr<GoalHandleNav> current_goal_handle_;
     uint64_t current_goal_seq_ = 0;  // cancel後の古いcallbackを無視するためのシーケンス番号
+    int reject_goal_streak_ = 0;     // Nav2に連続でacceptされなかった回数
 
     // 到達失敗したフロンティアのブラックリスト
     std::vector<std::pair<double,double>> blacklist_;
@@ -356,9 +362,26 @@ private:
             [this, seq](const GoalHandleNav::SharedPtr &gh) {
                 if (seq != current_goal_seq_) return;  // 古いゴールのcallbackを無視
                 if (!gh) {
-                    RCLCPP_WARN(this->get_logger(), "Goal rejected by Nav2, will retry");
+                    ++reject_goal_streak_;
+                    RCLCPP_WARN(this->get_logger(),
+                        "Goal rejected by Nav2 (%d/%d) at (%.2f, %.2f)",
+                        reject_goal_streak_, kMaxGoalRejects,
+                        current_goal_.pose.position.x, current_goal_.pose.position.y);
+                    // rejectはaction acceptレベルの即時拒否なのでMOVING状態を経由せず、
+                    // progress_timeoutの監視対象にならない。放置すると同じ目標を
+                    // 毎ループ再送し続けて全く動かなくなるため、ここで自前に
+                    // ブラックリスト行きにして次のフロンティアへ逃がす。
+                    if (reject_goal_streak_ >= kMaxGoalRejects) {
+                        RCLCPP_WARN(this->get_logger(),
+                            "Repeated rejection → blacklisting (%.2f, %.2f)",
+                            current_goal_.pose.position.x, current_goal_.pose.position.y);
+                        blacklist_.emplace_back(current_goal_.pose.position.x,
+                                                current_goal_.pose.position.y);
+                        reject_goal_streak_ = 0;
+                    }
                     state_ = State::IDLE;
                 } else {
+                    reject_goal_streak_ = 0;
                     RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2");
                 }
             };
@@ -430,34 +453,55 @@ private:
             arr.markers.push_back(m);
         }
 
-        // フロンティア一覧
-        for (const auto &f : frontiers) {
-            bool is_valid    = (f.size >= min_frontier_size_);
-            bool is_selected = (selected && &f == selected);
-            bool is_bl       = is_blacklisted(f.centroid_x, f.centroid_y);
-
+        // マップから判別されたフロンティア候補（sensor_explore_nodeの
+        // フラッグ表示と同じ構造: 1つのSPHERE_LISTにまとめ、選択中の目標は
+        // 混ぜずに別マーカー(target)として分離する）
+        {
             visualization_msgs::msg::Marker m;
             m.header.frame_id = global_frame_;
             m.header.stamp    = this->now();
-            m.ns = "frontiers"; m.id = id++;
-            m.type   = visualization_msgs::msg::Marker::SPHERE;
+            m.ns   = "detected_frontiers";
+            m.id   = id++;
+            m.type   = visualization_msgs::msg::Marker::SPHERE_LIST;
             m.action = visualization_msgs::msg::Marker::ADD;
-            m.pose.position.x = f.centroid_x;
-            m.pose.position.y = f.centroid_y;
-            m.pose.position.z = 0.1;
             m.pose.orientation.w = 1.0;
-            m.scale.x = m.scale.y = m.scale.z = std::max(0.2, std::min(1.0, f.size * 0.1));
+            m.scale.x = m.scale.y = m.scale.z = 0.15;
             m.lifetime = rclcpp::Duration::from_seconds(2.0 / planner_frequency_);
 
-            if (is_bl) {
-                m.color.r = 1.0; m.color.g = 0.0; m.color.b = 0.0; m.color.a = 0.5;
-            } else if (is_selected) {
-                m.color.r = 0.0; m.color.g = 1.0; m.color.b = 0.0; m.color.a = 1.0; // ターゲット（緑）
-            } else if (is_valid) {
-                m.color.r = 0.0; m.color.g = 0.5; m.color.b = 1.0; m.color.a = 0.8; // 有効（青）
-            } else {
-                m.color.r = 0.5; m.color.g = 0.5; m.color.b = 0.5; m.color.a = 0.3; // サイズ未満（灰）
+            for (const auto &f : frontiers) {
+                if (is_blacklisted(f.centroid_x, f.centroid_y)) continue;  // 赤丸で既に表現済み
+
+                geometry_msgs::msg::Point pt;
+                pt.x = f.centroid_x; pt.y = f.centroid_y; pt.z = 0.1;
+                m.points.push_back(pt);
+
+                visualization_msgs::msg::Marker::_color_type c;
+                if (f.size >= min_frontier_size_) {
+                    c.r = 0.0; c.g = 0.5; c.b = 1.0; c.a = 0.8;  // 有効（青）
+                } else {
+                    c.r = 0.5; c.g = 0.5; c.b = 0.5; c.a = 0.3;  // サイズ未満（灰）
+                }
+                m.colors.push_back(c);
             }
+            if (!m.points.empty()) arr.markers.push_back(m);
+        }
+
+        // 選択された目標（sensor_explore_nodeのマゼンタtargetと同じ表現）
+        if (selected) {
+            visualization_msgs::msg::Marker m;
+            m.header.frame_id = global_frame_;
+            m.header.stamp    = this->now();
+            m.ns   = "target";
+            m.id   = id++;
+            m.type   = visualization_msgs::msg::Marker::SPHERE;
+            m.action = visualization_msgs::msg::Marker::ADD;
+            m.pose.position.x = selected->centroid_x;
+            m.pose.position.y = selected->centroid_y;
+            m.pose.position.z = 0.2;
+            m.pose.orientation.w = 1.0;
+            m.scale.x = m.scale.y = m.scale.z = 0.25;
+            m.color.r = 1.0; m.color.g = 0.0; m.color.b = 1.0; m.color.a = 1.0;
+            m.lifetime = rclcpp::Duration::from_seconds(2.0 / planner_frequency_);
             arr.markers.push_back(m);
         }
 

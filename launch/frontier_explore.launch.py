@@ -8,6 +8,14 @@ TF_REMAP = [('tf', '/tf'), ('tf_static', '/tf_static')]
 
 def make_nav2_nodes(robot_name: str, params_file: str) -> list:
     """robot_name ネームスペース用の Nav2 ノード群を生成する。"""
+    # $(find-pkg-share ...) はNode(parameters=[path])のように素のパス文字列
+    # で渡したYAML内では展開されない(launch_rosのParameterFileがデフォルト
+    # allow_substs=Falseで包むため)。実パスはここでPythonで解決してから
+    # bt_navigatorにだけ追加パラメータとして渡す。
+    bt_xml_path = os.path.join(
+        get_package_share_directory('multi_explore_mapping'),
+        'config', 'nav2_bt_fast_fail.xml')
+
     return [
         Node(
             package='nav2_controller',
@@ -33,7 +41,7 @@ def make_nav2_nodes(robot_name: str, params_file: str) -> list:
             name='bt_navigator',
             namespace=robot_name,
             output='screen',
-            parameters=[params_file],
+            parameters=[params_file, {'default_nav_to_pose_bt_xml': bt_xml_path}],
             remappings=TF_REMAP,
         ),
         Node(
