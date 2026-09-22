@@ -13,8 +13,10 @@ from ament_index_python.packages import get_package_share_directory
 
 # aws / custom ワールド用の既定スポーン配置 (先頭 num_robots 台を使う)
 DEFAULT_ROBOT_POSES = [
-    (0.0,  2.0, 0.0),
-    (0.0, -2.0, 0.0),
+    (1.0, 0.0, 0.0),
+    (0.0, 0.0, 0.0),
+    #(0.0,  2.0, 0.0),
+    #(0.0, -2.0, 0.0),
     #(-10.0,-10.0,0.0),
     #(-10.0,-15.0,0.0),
     (2.0,  0.0, 0.0),
@@ -163,6 +165,8 @@ def launch_setup(context, *args, **kwargs):
     poses = None
     if world_type == 'custom':
         world_path = os.path.join(pkg_my_mapping, 'worlds', 'my_custom_room.world')
+    elif world_type == 'edit_map':
+        world_path = os.path.join(pkg_my_mapping, 'worlds', 'edit_map_world.world')
     elif world_type == 'rmf':
         world_path, poses = _setup_rmf_world(context, pkg_my_mapping, logs)
     else:  # 'aws'
@@ -381,7 +385,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world_type',
             default_value='aws',
-            description='Select world environment: [aws, custom, rmf]'
+            description='Select world environment: [aws, custom, edit_map, rmf]'
         ),
         DeclareLaunchArgument(
             'rmf_world',
