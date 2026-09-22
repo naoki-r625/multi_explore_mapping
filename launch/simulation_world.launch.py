@@ -290,6 +290,50 @@ def launch_setup(context, *args, **kwargs):
         )
 
         # 各ロボット専用の SLAM (slam_toolbox) ノード
+        # ── 共通パラメータ ──────────────────────────────────────
+        slam_params = {
+            'use_sim_time': True,
+            'base_frame': f'{ns}/base_footprint',
+            'odom_frame': f'{ns}/odom',
+            'map_frame': f'{ns}/map',
+            'scan_topic': f'/{ns}/scan_filtered',
+            'mode': 'mapping',
+            'transform_timeout': 0.2,
+            'minimum_time_interval': 0.1,
+            'do_loop_closing': True,
+            'map_update_interval': 1.0,
+            'link_match_minimum_response_fine': 0.2,
+            'link_scan_maximum_distance': 1.5,
+            'loop_search_space_dimension': 2.0,
+            'loop_match_maximum_variance_coarse': 0.55,
+            'loop_match_minimum_response_fine': 0.65,
+            'scan_buffer_size': 10,
+            'correlation_search_space_dimension': 0.5,
+            'correlation_search_space_resolution': 0.01,
+            'correlation_search_space_smear_deviation': 0.03,
+            'loop_search_space_resolution': 0.05,
+            'optimize_every_n_nodes': 3,
+        }
+
+        if world_type == 'edit_map':
+            # 廊下環境: ループクロージャ探索範囲を広げて枝道のずれを修正する
+            slam_params.update({
+                'loop_search_maximum_distance':      4.0,  # 廊下ドリフト分をカバー (warehouse: 1.5)
+                'loop_match_minimum_chain_size':     5,    # 短い枝道でもループ閉鎖 (warehouse: 10)
+                'loop_match_minimum_response_coarse': 0.35, # 廊下類似スキャンでも許容 (warehouse: 0.45)
+                'minimum_travel_distance':           0.3,  # 廊下での連続誤マッチ抑制 (warehouse: 0.1)
+                'minimum_travel_heading':            0.2,  # 同上 (warehouse: 0.1)
+            })
+        else:
+            # warehouse / aws 環境: 隣接棚への誤クロージャ防止優先
+            slam_params.update({
+                'loop_search_maximum_distance':       1.5,
+                'loop_match_minimum_chain_size':      10,
+                'loop_match_minimum_response_coarse': 0.45,
+                'minimum_travel_distance':            0.1,
+                'minimum_travel_heading':             0.1,
+            })
+
         per_robot.append(
             Node(
                 package='slam_toolbox',
@@ -297,49 +341,7 @@ def launch_setup(context, *args, **kwargs):
                 name='slam_toolbox',
                 namespace=ns,
                 output='screen',
-                parameters=[{
-                    'use_sim_time': True,
-                    'base_frame': f'{ns}/base_footprint',
-                    'odom_frame': f'{ns}/odom',
-                    'map_frame': f'{ns}/map',
-                    'scan_topic': f'/{ns}/scan_filtered',
-                    'mode': 'mapping',
-                    'transform_timeout': 0.2,
-                    'minimum_time_interval': 0.1,
-
-                    # ===== ループクロージャ基本制御 =====
-                    'do_loop_closing': True,
-                    'map_update_interval': 1.0,
-
-                    # 1. スキャンマッチングの厳格化（誤認識を防ぐ）
-                    # 'minimum_note_score': 0.55,                    # ← 削除：存在しないパラメータ（無効）
-                    # 'link_match_minimum_response_coarse': 0.1,     # ← 削除：存在しないパラメータ（無効）
-                    'link_match_minimum_response_fine': 0.2,         # ← 追加：正しい名前。デフォルト0.1よりやや厳格化
-                    'link_scan_maximum_distance': 1.5,
-
-                    # 2. ループ検索範囲の最適化
-                    'loop_search_maximum_distance': 1.5,             # 4.0 → 縮小（隣の棚に迷い込まないように）
-                    'loop_match_minimum_chain_size': 10,             # 5 → 10に戻す（短いチェーンでの誤検出防止）
-                    'loop_search_space_dimension': 2.0,
-                    'loop_match_maximum_variance_coarse': 0.55,       # そのままでOK（厳格化に効いている）
-                    'loop_match_minimum_response_coarse': 0.45,      # ← 追加：抜けていた本命パラメータ
-                    'loop_match_minimum_response_fine': 0.65,        # ← 追加：抜けていた本命パラメータ
-
-                    # 3. グラフ登録（キーフレーム）の頻度調整
-                    'minimum_travel_distance': 0.1,
-                    'minimum_travel_heading': 0.1,
-
-                    # 4. ループ閉鎖後の最適化
-                    'scan_buffer_size': 10,
-                    # 'scan_buffer_max_num_lines': 50,               # ← 削除：存在しないパラメータ（無効）
-                    'correlation_search_space_dimension': 0.5,
-                    'correlation_search_space_resolution': 0.01,
-                    'correlation_search_space_smear_deviation': 0.03,
-
-                    # 5. Ceres Solver バックエンド設定
-                    'loop_search_space_resolution': 0.05,
-                    'optimize_every_n_nodes': 3,
-                }],
+                parameters=[slam_params],
                 remappings=[
                     ('/map', f'/{ns}/map'),
                     ('/map_metadata', f'/{ns}/map_metadata'),
