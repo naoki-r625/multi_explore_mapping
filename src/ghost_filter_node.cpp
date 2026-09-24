@@ -54,7 +54,15 @@ private:
         // 双方の既存レイトレーシングに正しく「range_maxまでクリア」と伝える。
         for (auto& r : out.ranges) {
             if (r >= out.range_max - 1e-3f) {
+                // Gazebo returns range_max (not inf) for rays that hit nothing — normalize
+                // to inf so slam_toolbox/costmap raytrace correctly as "clear to range_max".
                 r = std::numeric_limits<float>::infinity();
+            } else if (std::isfinite(r) && r > 0.0f && r < out.range_min) {
+                // Gazebo may return the actual sub-range_min distance for objects in the
+                // sensor blind zone (< range_min).  Clamp to range_min so cluster_detector
+                // and Nav2 costmap treat the direction as "obstacle at closest measurable
+                // distance" rather than silently discarding it.
+                r = out.range_min;
             }
         }
 

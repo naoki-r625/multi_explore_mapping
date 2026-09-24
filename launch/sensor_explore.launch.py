@@ -32,6 +32,8 @@ def generate_launch_description():
         'odom_frame': 'map',   # SLAM が map→odom TF を配信している場合
     }
 
+    scan_remap = [('scan', 'scan_filtered')]
+
     return LaunchDescription([
         Node(
             package='multi_explore_mapping',
@@ -39,6 +41,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_1',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
         Node(
@@ -47,6 +50,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_2',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
         Node(
@@ -55,6 +59,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_3',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
         Node(
@@ -63,6 +68,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_4',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
         Node(
@@ -71,6 +77,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_5',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
         Node(
@@ -79,6 +86,7 @@ def generate_launch_description():
             name='sensor_explore',
             namespace='robot_6',
             parameters=[common_params],
+            remappings=scan_remap,
             output='screen',
         ),
     ])

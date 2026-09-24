@@ -38,8 +38,8 @@ static std::vector<sensor_proc::ProcessedScan::GapTarget> detect_gaps(
     for (size_t i = 0; i + 1 < r.size(); ++i) {
         const float ri  = r[i];
         const float ri1 = r[i + 1];
-        const bool h1 = std::isfinite(ri)  && ri  > scan.range_min && ri  < rmax * 0.97f;
-        const bool h2 = std::isfinite(ri1) && ri1 > scan.range_min && ri1 < rmax * 0.97f;
+        const bool h1 = std::isfinite(ri)  && ri  >= scan.range_min && ri  < rmax * 0.97f;
+        const bool h2 = std::isfinite(ri1) && ri1 >= scan.range_min && ri1 < rmax * 0.97f;
 
         bool is_gap = (h1 != h2);
         if (!is_gap && h1 && h2)

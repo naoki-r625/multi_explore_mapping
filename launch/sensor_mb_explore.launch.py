@@ -73,6 +73,7 @@ def generate_launch_description():
                 name='sensor_mb_explore',
                 namespace=ns,
                 parameters=[common_params],
+                remappings=[('scan', 'scan_filtered')],
                 output='screen',
             )
         )

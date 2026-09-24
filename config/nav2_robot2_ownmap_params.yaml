@@ -149,7 +149,7 @@ robot_2/local_costmap/local_costmap:
       enabled: True
       observation_sources: scan
       scan:
-        topic: /robot_2/scan
+        topic: /robot_2/scan_filtered
         max_obstacle_height: 2.0
         clearing: True
         marking: True
@@ -182,7 +182,7 @@ robot_2/global_costmap/global_costmap:
       enabled: True
       observation_sources: scan
       scan:
-        topic: /robot_2/scan
+        topic: /robot_2/scan_filtered
         max_obstacle_height: 2.0
         clearing: True
         marking: True

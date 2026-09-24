@@ -302,7 +302,7 @@ def launch_setup(context, *args, **kwargs):
             'minimum_time_interval': 0.1,
             'do_loop_closing': True,
             'map_update_interval': 1.0,
-            'link_match_minimum_response_fine': 0.2,
+            'link_match_minimum_response_fine': 0.45,
             'link_scan_maximum_distance': 1.5,
             'loop_search_space_dimension': 2.0,
             'loop_match_maximum_variance_coarse': 0.55,
@@ -318,9 +318,9 @@ def launch_setup(context, *args, **kwargs):
         if world_type == 'edit_map':
             # 廊下環境: ループクロージャ探索範囲を広げて枝道のずれを修正する
             slam_params.update({
-                'loop_search_maximum_distance':      4.0,  # 廊下ドリフト分をカバー (warehouse: 1.5)
-                'loop_match_minimum_chain_size':     5,    # 短い枝道でもループ閉鎖 (warehouse: 10)
-                'loop_match_minimum_response_coarse': 0.35, # 廊下類似スキャンでも許容 (warehouse: 0.45)
+                'loop_search_maximum_distance':      3.0,  # 廊下ドリフト分をカバー (warehouse: 1.5)
+                'loop_match_minimum_chain_size':     10,    # 短い枝道でもループ閉鎖 (warehouse: 10)
+                'loop_match_minimum_response_coarse': 0.45, # 廊下類似スキャンでも許容 (warehouse: 0.45)
                 'minimum_travel_distance':           0.3,  # 廊下での連続誤マッチ抑制 (warehouse: 0.1)
                 'minimum_travel_heading':            0.2,  # 同上 (warehouse: 0.1)
             })
