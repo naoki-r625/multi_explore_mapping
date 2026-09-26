@@ -90,13 +90,42 @@ def generate_launch_description():
         'global_frame':      'map',
         'planner_frequency': 2.0,
         'progress_timeout':  90.0,
-        'min_frontier_size': 0.3,
+        'min_frontier_size': 0.6,
         'potential_scale':   0.5,
         'gain_scale':        3.0,
         'visualize':         True,
         'blacklist_radius':  1.0,
         'blacklist_clear_sec': 60.0,
+        'use_voronoi_partition': True,
     }
+
+    robot_names = ['robot_1', 'robot_2']
+
+    # voronoi_partition_node: 統合地図上でロボットごとの担当領域(Voronoi)を計算し、
+    # /<robot>/voronoi_mask として配信する。adaptive_explore.launch.py と同じ設定
+    # (詳細は docs/voronoi_partition.md)。
+    voronoi_params = {
+        'use_sim_time':          True,
+        'global_frame':          'map',
+        'base_frame_suffix':     'base_footprint',
+        'map_topic':              '/map',   # icp_map_matching_node が配信する統合地図
+        # icp_map_matching_node の overlap_filter_margin の既定値(2.0m)と揃えて
+        # いる。担当領域の境界に、常にICP対応点が取れるだけの重複帯を残すため。
+        'buffer_width_m':          2.0,
+        'recompute_period_sec':    5.0,
+        'downsample_factor':         2,
+        'obstacle_threshold':       50,
+        'hysteresis_margin_m':     1.5,
+        'robot_names':          robot_names,
+    }
+
+    voronoi_node = Node(
+        package='multi_explore_mapping',
+        executable='voronoi_partition_node',
+        name='voronoi_partition',
+        output='screen',
+        parameters=[voronoi_params],
+    )
 
     # 【重要】トピックを共通の統合マップ(/map)をインフレーションさせた各Nav2グローバルコストマップに変更
     frontier_r1 = Node(
@@ -105,9 +134,10 @@ def generate_launch_description():
         name='frontier_explorer',
         namespace='robot_1',
         output='screen',
-        parameters=[{**common_params, 
+        parameters=[{**common_params,
                      'robot_base_frame': 'robot_1/base_footprint',
-                     'map_topic': '/robot_1/global_costmap/costmap'}],
+                     'map_topic': '/robot_1/global_costmap/costmap',
+                     'peer_namespaces': ['robot_2']}],
         remappings=[
             ('navigate_to_pose', '/robot_1/navigate_to_pose'),
             *TF_REMAP,
@@ -120,9 +150,10 @@ def generate_launch_description():
         name='frontier_explorer',
         namespace='robot_2',
         output='screen',
-        parameters=[{**common_params, 
+        parameters=[{**common_params,
                      'robot_base_frame': 'robot_2/base_footprint',
-                     'map_topic': '/robot_2/global_costmap/costmap'}],
+                     'map_topic': '/robot_2/global_costmap/costmap',
+                     'peer_namespaces': ['robot_1']}],
         remappings=[
             ('navigate_to_pose', '/robot_2/navigate_to_pose'),
             *TF_REMAP,
@@ -134,5 +165,6 @@ def generate_launch_description():
     return LaunchDescription([
         *nav2_nodes_r1,
         nav2_nodes_r2,
+        voronoi_node,
         delayed_frontiers,
     ])

@@ -154,7 +154,7 @@ robot_1/local_costmap/local_costmap:
         clearing: True
         marking: True
         data_type: "LaserScan"
-        raytrace_max_range: 3.0
+        raytrace_max_range: 2.5
         raytrace_min_range: 0.0
         obstacle_max_range: 2.5
         obstacle_min_range: 0.0
@@ -187,7 +187,7 @@ robot_1/global_costmap/global_costmap:
         clearing: True
         marking: True
         data_type: "LaserScan"
-        raytrace_max_range: 3.0
+        raytrace_max_range: 2.5
         raytrace_min_range: 0.0
         obstacle_max_range: 2.5
         obstacle_min_range: 0.0

@@ -44,7 +44,7 @@ FRONTIER_PARAMS = {
     'global_frame':      'map',
     'planner_frequency': 2.0,
     'progress_timeout':  90.0,
-    'min_frontier_size': 0.3,
+    'min_frontier_size': 0.6,
     'potential_scale':   0.5,
     'gain_scale':        3.0,
     'visualize':         True,
@@ -186,6 +186,7 @@ def generate_launch_description():
         nav2_params_file = os.path.join(pkg_dir, 'config', nav2_params_name)
         nav2_node_groups[robot] = make_nav2_nodes(robot, nav2_params_file)
 
+        peer_namespaces = [r for r, _ in ROBOTS if r != robot]
         frontier_nodes[robot] = Node(
             package='multi_explore_mapping',
             executable='frontier_explore_node',
@@ -194,7 +195,8 @@ def generate_launch_description():
             output='screen',
             parameters=[{**FRONTIER_PARAMS,
                          'robot_base_frame': f'{robot}/base_footprint',
-                         'map_topic': f'/{robot}/global_costmap/costmap'}],
+                         'map_topic': f'/{robot}/global_costmap/costmap',
+                         'peer_namespaces': peer_namespaces}],
             remappings=[
                 ('navigate_to_pose', f'/{robot}/navigate_to_pose'),
                 *TF_REMAP,

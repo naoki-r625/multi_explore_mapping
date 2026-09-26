@@ -152,13 +152,18 @@ robot_2/local_costmap/local_costmap:
       plugin: "nav2_costmap_2d::ObstacleLayer"
       enabled: True
       observation_sources: scan
+      # ローカルコストマップだけは生スキャン(scan_filtered ではなく scan)を使う。
+      # scan_filtered は ghost_filter_node が相手ロボットの機体付近のビームを
+      # inf化したもの(SLAMのゴースト壁防止用)。これをそのままDWBの障害物回避
+      # に使うと相手ロボットが見えなくなり衝突する。DWBが実際に参照するのは
+      # ローカルコストマップなので、ここだけ生データに戻して反応性を回復する。
       scan:
-        topic: /robot_2/scan_filtered
+        topic: /robot_2/scan
         max_obstacle_height: 2.0
         clearing: True
         marking: True
         data_type: "LaserScan"
-        raytrace_max_range: 3.0
+        raytrace_max_range: 2.5
         raytrace_min_range: 0.0
         obstacle_max_range: 2.5
         obstacle_min_range: 0.0
@@ -191,7 +196,7 @@ robot_2/global_costmap/global_costmap:
         clearing: True
         marking: True
         data_type: "LaserScan"
-        raytrace_max_range: 3.0
+        raytrace_max_range: 2.5
         raytrace_min_range: 0.0
         obstacle_max_range: 2.5
         obstacle_min_range: 0.0

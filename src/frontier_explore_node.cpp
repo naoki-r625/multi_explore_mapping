@@ -16,6 +16,8 @@
 #include <cmath>
 #include <algorithm>
 #include <random>
+#include <map>
+#include <string>
 
 class FrontierExplorerNode : public rclcpp::Node {
 public:
@@ -40,6 +42,8 @@ public:
         this->declare_parameter<double>("blacklist_radius", 1.0);
         this->declare_parameter<double>("blacklist_clear_sec", 60.0);
         this->declare_parameter<bool>("use_voronoi_partition", true);
+        this->declare_parameter<std::vector<std::string>>("peer_namespaces", std::vector<std::string>{});
+        this->declare_parameter<double>("peer_claim_radius", 1.0);
 
         robot_base_frame_  = this->get_parameter("robot_base_frame").as_string();
         global_frame_      = this->get_parameter("global_frame").as_string();
@@ -52,6 +56,8 @@ public:
         blacklist_radius_  = this->get_parameter("blacklist_radius").as_double();
         blacklist_clear_sec_ = this->get_parameter("blacklist_clear_sec").as_double();
         use_voronoi_        = this->get_parameter("use_voronoi_partition").as_bool();
+        peer_namespaces_    = this->get_parameter("peer_namespaces").as_string_array();
+        peer_claim_radius_  = this->get_parameter("peer_claim_radius").as_double();
         std::string map_topic = this->get_parameter("map_topic").as_string();
 
         // 統合コストマップをサブスクライブ
@@ -75,6 +81,28 @@ public:
         if (visualize_) {
             frontier_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
                 "frontiers", 10);
+        }
+
+        // 相手ロボットへ自分の現在のナビゲーション目標を配信する。相手はこれを
+        // 見て、同じ/近いフロンティアを選ばないようにする（ボロノイの境界共有
+        // バッファ帯やフォールバックだけでは、境界付近で両者が同じ場所を最適解
+        // と判断してしまう競合を防げないため）。
+        target_claim_pub_ = this->create_publisher<geometry_msgs::msg::PointStamped>(
+            "current_target", rclcpp::QoS(1).transient_local().reliable());
+
+        // 相手ロボットの現在目標を購読し、自分のフロンティア選択から除外する。
+        for (const auto& peer_ns : peer_namespaces_) {
+            auto sub = this->create_subscription<geometry_msgs::msg::PointStamped>(
+                "/" + peer_ns + "/current_target",
+                rclcpp::QoS(1).transient_local().reliable(),
+                [this, peer_ns](geometry_msgs::msg::PointStamped::SharedPtr msg) {
+                    if (msg->header.frame_id.empty()) {
+                        peer_targets_.erase(peer_ns);
+                    } else {
+                        peer_targets_[peer_ns] = *msg;
+                    }
+                });
+            peer_target_subs_.push_back(sub);
         }
 
         // Nav2 アクションクライアントの生成
@@ -125,6 +153,8 @@ private:
     double blacklist_radius_;
     double blacklist_clear_sec_;
     bool use_voronoi_;
+    std::vector<std::string> peer_namespaces_;
+    double peer_claim_radius_;
 
     nav_msgs::msg::OccupancyGrid::SharedPtr current_map_;
     bool map_updated_ = false;
@@ -140,12 +170,19 @@ private:
     // 到達失敗したフロンティアのブラックリスト
     std::vector<std::pair<double,double>> blacklist_;
 
+    // 相手ロボットの現在のナビゲーション目標（namespace -> 最新の受信値）。
+    // frame_idが空のメッセージを受け取ったキーは即座にeraseされるので、
+    // このmapに存在するエントリは「相手が今まさに向かっている場所」を表す。
+    std::map<std::string, geometry_msgs::msg::PointStamped> peer_targets_;
+
     tf2_ros::Buffer tf_buffer_;
     tf2_ros::TransformListener tf_listener_;
 
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr voronoi_mask_sub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_publisher_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr target_claim_pub_;
+    std::vector<rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr> peer_target_subs_;
     rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
     rclcpp::TimerBase::SharedPtr timer_;
 
@@ -178,11 +215,24 @@ private:
                 for (int d = 0; d < 8; d++) {
                     int nx = x + dx[d], ny = y + dy[d];
                     if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
-            
+
+                    // 斜め方向の隣接は、両脇の直交セル(水平側・垂直側)の
+                    // どちらかが障害物なら壁越しの「角抜け」とみなしてスキップ
+                    // する。8近傍の対角判定は物理的な遮蔽を考慮しないため、
+                    // 壁のすぐ外側のセルが壁の内側の未知領域と斜めにだけ接して
+                    // いる場合でも本来は繋がっていない。これを弾かないと、壁が
+                    // グリッドに対して斜めのときにできる階段状のギザギザ角
+                    // ほぼ全てが誤ってフロンティア判定されてしまう。
+                    if (dx[d] != 0 && dy[d] != 0) {
+                        int8_t flank_h = map.data[y * W + (x + dx[d])];
+                        int8_t flank_v = map.data[(y + dy[d]) * W + x];
+                        if (flank_h >= 100 || flank_v >= 100) continue;
+                    }
+
                     // 隣接セルに「未知（-1）」があるセルを境界線（フロンティア）とする
-                    if (map.data[ny * W + nx] == -1) { 
-                        has_unknown = true; 
-                        break; 
+                    if (map.data[ny * W + nx] == -1) {
+                        has_unknown = true;
+                        break;
                     }
                 }
                 if (has_unknown) frontier_cells.push_back({x, y});
@@ -277,6 +327,17 @@ private:
         return false;
     }
 
+    // 相手ロボットが今まさに向かっている場所の近くかどうか。ボロノイの境界
+    // 共有バッファ帯やフォールバックだけでは境界付近の同時選択を防げないため、
+    // 領域制約とは独立に常にチェックする。
+    bool is_peer_claimed(double cx, double cy) const {
+        for (const auto &[peer_ns, pt] : peer_targets_) {
+            (void)peer_ns;
+            if (std::hypot(cx - pt.point.x, cy - pt.point.y) < peer_claim_radius_) return true;
+        }
+        return false;
+    }
+
     // respect_territory=true のときは、自分のボロノイセル外
     // （voronoi_mask の値が 50/100 でない候補）を選択肢から除外する。
     Frontier* select_best_frontier(std::vector<Frontier> &frontiers, double robot_x, double robot_y,
@@ -287,6 +348,7 @@ private:
         for (auto &f : frontiers) {
             if (f.size < min_frontier_size_) continue;
             if (is_blacklisted(f.centroid_x, f.centroid_y)) continue;
+            if (is_peer_claimed(f.centroid_x, f.centroid_y)) continue;
             if (respect_territory && voronoi_mask_ &&
                 !voronoi::in_own_territory(*voronoi_mask_, f.centroid_x, f.centroid_y))
                 continue;
@@ -339,6 +401,24 @@ private:
         }
     }
 
+    // 自分の現在目標を相手ロボットへ配信する。frame_idを空にしたメッセージが
+    // 「目標なし（解除）」の合図。
+    void publish_target_claim(double x, double y) {
+        geometry_msgs::msg::PointStamped msg;
+        msg.header.frame_id = global_frame_;
+        msg.header.stamp    = this->now();
+        msg.point.x = x;
+        msg.point.y = y;
+        target_claim_pub_->publish(msg);
+    }
+
+    void clear_target_claim() {
+        geometry_msgs::msg::PointStamped msg;
+        msg.header.frame_id = "";
+        msg.header.stamp    = this->now();
+        target_claim_pub_->publish(msg);
+    }
+
     void send_nav_goal(double x, double y) {
         if (!nav_client_->action_server_is_ready()) {
             RCLCPP_WARN(this->get_logger(), "navigate_to_pose action server not available");
@@ -380,6 +460,7 @@ private:
                         reject_goal_streak_ = 0;
                     }
                     state_ = State::IDLE;
+                    clear_target_claim();
                 } else {
                     reject_goal_streak_ = 0;
                     RCLCPP_INFO(this->get_logger(), "Goal accepted by Nav2");
@@ -413,11 +494,13 @@ private:
                         break;
                 }
                 state_ = State::IDLE;
+                clear_target_claim();
             };
 
         nav_client_->async_send_goal(goal_msg, opts);
         state_ = State::MOVING;
         last_progress_time_ = this->now();
+        publish_target_claim(x, y);
 
         RCLCPP_INFO(this->get_logger(), "Navigating to frontier (%.2f, %.2f)", x, y);
     }
@@ -426,6 +509,7 @@ private:
         if (state_ == State::MOVING) {
             nav_client_->async_cancel_all_goals();
             state_ = State::IDLE;
+            clear_target_claim();
         }
     }
 
