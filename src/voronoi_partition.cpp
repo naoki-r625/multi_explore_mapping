@@ -129,41 +129,70 @@ PartitionFields compute_partition(
         return out;
 
     const bool apply_hysteresis = (previous != nullptr) && (hysteresis_margin_m > 0.0);
-
+    std::vector<std::vector<float>> distance_fields;
+    distance_fields.reserve(robots.size());
     for (size_t r = 0; r < robots.size(); ++r) {
         const int gx = static_cast<int>(
             std::floor((robots[r].x - out.origin_x) / out.resolution));
         const int gy = static_cast<int>(
             std::floor((robots[r].y - out.origin_y) / out.resolution));
 
-        const auto field = dijkstra_from(map, gx, gy, obstacle_threshold);
+        distance_fields.push_back(dijkstra_from(map, gx, gy, obstacle_threshold));
+    }
 
-        for (size_t i = 0; i < N; ++i) {
-            float d = field[i];
-
-            // Hysteresis: give the previous cycle's owner of this cell a
-            // discount so a challenger has to be genuinely closer (not just
-            // marginally, due to noise or a robot's position wobbling) to
-            // take it over. See compute_partition()'s doc comment.
-            if (apply_hysteresis) {
-                const int x = static_cast<int>(i % static_cast<size_t>(out.width));
-                const int y = static_cast<int>(i / static_cast<size_t>(out.width));
-                const double wx = out.origin_x + (x + 0.5) * out.resolution;
-                const double wy = out.origin_y + (y + 0.5) * out.resolution;
-                if (owner_at(*previous, wx, wy) == static_cast<int8_t>(r))
-                    d -= static_cast<float>(hysteresis_margin_m);
+    // Compute raw nearest/second-nearest distances first. Apply hysteresis only
+    // to the ownership decision, never to the stored distances: this keeps the
+    // shared band geometrically correct and prevents the stability margin from
+    // contaminating later recomputations.
+    for (size_t i = 0; i < N; ++i) {
+        float best = std::numeric_limits<float>::infinity();
+        float second = std::numeric_limits<float>::infinity();
+        int8_t best_robot = -1;
+        int8_t second_robot = -1;
+        for (size_t r = 0; r < robots.size(); ++r) {
+            const float d = distance_fields[r][i];
+            if (d < best) {
+                second = best;
+                second_robot = best_robot;
+                best = d;
+                best_robot = static_cast<int8_t>(r);
+            } else if (d < second) {
+                second = d;
+                second_robot = static_cast<int8_t>(r);
             }
+        }
 
-            if (d < out.dist_owner[i]) {
-                // Current owner demotes to second place.
-                out.dist_second[i]   = out.dist_owner[i];
-                out.second_owner[i]  = out.owner[i];
-                out.dist_owner[i]    = d;
-                out.owner[i]         = static_cast<int8_t>(r);
-            } else if (d < out.dist_second[i]) {
-                out.dist_second[i]  = d;
-                out.second_owner[i] = static_cast<int8_t>(r);
+        int8_t chosen = best_robot;
+        if (apply_hysteresis) {
+            const int x = static_cast<int>(i % static_cast<size_t>(out.width));
+            const int y = static_cast<int>(i / static_cast<size_t>(out.width));
+            const double wx = out.origin_x + (x + 0.5) * out.resolution;
+            const double wy = out.origin_y + (y + 0.5) * out.resolution;
+            const int8_t old_owner = owner_at(*previous, wx, wy);
+            if (old_owner >= 0 && static_cast<size_t>(old_owner) < robots.size() &&
+                old_owner != best_robot) {
+                const float old_distance = distance_fields[static_cast<size_t>(old_owner)][i];
+                // Ownership changes only when the new robot is closer by more
+                // than the configured margin. Robot positions still affect the
+                // raw distances, but small motion/map changes do not flip cells.
+                if (std::isfinite(old_distance) &&
+                    best + static_cast<float>(hysteresis_margin_m) >= old_distance) {
+                    chosen = old_owner;
+                }
             }
+        }
+
+        if (chosen < 0 || !std::isfinite(distance_fields[static_cast<size_t>(chosen)][i]))
+            continue;
+
+        out.owner[i] = chosen;
+        out.dist_owner[i] = distance_fields[static_cast<size_t>(chosen)][i];
+        if (chosen == best_robot) {
+            out.second_owner[i] = second_robot;
+            out.dist_second[i] = second;
+        } else {
+            out.second_owner[i] = best_robot;
+            out.dist_second[i] = best;
         }
     }
 
@@ -213,16 +242,16 @@ nav_msgs::msg::OccupancyGrid build_mask(
 
 bool in_own_territory(const nav_msgs::msg::OccupancyGrid& mask, double wx, double wy) {
     const auto& info = mask.info;
-    if (info.width == 0 || info.height == 0 || info.resolution <= 0.0f) return true;
+    if (info.width == 0 || info.height == 0 || info.resolution <= 0.0f) return false;
 
     const int gx = static_cast<int>(std::floor((wx - info.origin.position.x) / info.resolution));
     const int gy = static_cast<int>(std::floor((wy - info.origin.position.y) / info.resolution));
     if (gx < 0 || gx >= static_cast<int>(info.width) ||
         gy < 0 || gy >= static_cast<int>(info.height))
-        return true;  // outside current mask coverage: don't block on it
+        return false;  // unknown coverage is not permission to leave the territory
 
     const size_t idx = static_cast<size_t>(gy) * info.width + static_cast<size_t>(gx);
-    if (idx >= mask.data.size()) return true;
+    if (idx >= mask.data.size()) return false;
 
     const int8_t v = mask.data[idx];
     return v == 50 || v == 100;

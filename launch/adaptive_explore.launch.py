@@ -44,7 +44,7 @@ FRONTIER_PARAMS = {
     'global_frame':      'map',
     'planner_frequency': 2.0,
     'progress_timeout':  90.0,
-    'min_frontier_size': 0.6,
+    'min_frontier_size': 0.3,
     'potential_scale':   0.5,
     'gain_scale':        3.0,
     'visualize':         True,
@@ -83,7 +83,7 @@ VORONOI_PARAMS = {
     # 限りは他ロボットに明け渡さない。ロボット位置や新発見の通路次第で毎回の
     # 最近傍計算だけだと担当領域が左右で入れ替わってしまうことがあるため、
     # ちらつき・往復を抑える。0にすると旧来のヒステリシスなし挙動に戻る。
-    'hysteresis_margin_m':     1.5,
+    'hysteresis_margin_m':     3.0,
 }
 
 # Nav2 用パラメータファイルは robot_1 / robot_2 分しか用意されていないため、

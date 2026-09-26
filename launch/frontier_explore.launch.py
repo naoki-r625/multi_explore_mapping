@@ -90,9 +90,10 @@ def generate_launch_description():
         'global_frame':      'map',
         'planner_frequency': 2.0,
         'progress_timeout':  90.0,
-        'min_frontier_size': 0.6,
+        'min_frontier_size': 0.3,
         'potential_scale':   0.5,
         'gain_scale':        3.0,
+        'backward_penalty_scale': 1.0,
         'visualize':         True,
         'blacklist_radius':  1.0,
         'blacklist_clear_sec': 60.0,
@@ -115,7 +116,7 @@ def generate_launch_description():
         'recompute_period_sec':    5.0,
         'downsample_factor':         2,
         'obstacle_threshold':       50,
-        'hysteresis_margin_m':     1.5,
+        'hysteresis_margin_m':     3.0,
         'robot_names':          robot_names,
     }
 

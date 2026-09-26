@@ -1,22 +1,28 @@
 /**
- * Sensor-based exploration with Nav2 move-base control.
+ * Sensor-based autonomous exploration node.
  *
- * Frontier detection : gap-based (sensor_processor), same algorithm as sensor_explore_node
- * Movement control   : Nav2 NavigateToPose action (obstacle avoidance delegated to Nav2)
- * Multi-robot        : same /shared_* topics as sensor_explore_node
+ * Obstacle avoidance : cluster-based VFH via sensor_processor
+ * Exploration        : persistent frontier store + multi-robot coordination
  *
- * Global costmap uses each robot's own SLAM map (/robot_N/map), not the merged map.
- * Start with: ros2 launch multi_explore_mapping sensor_mb_explore.launch.py
+ * Multi-robot topics
+ *   /shared_exploration_poses  (PoseStamped, 1 Hz): own odometry trail
+ *   /shared_frontiers          (PoseArray,   1 Hz): detected-but-unvisited branch points
+ *   /shared_targets            (PoseStamped, 5 Hz): current navigation goal (claim)
+ *     — When robot A claims a frontier as its nav goal, peers treat that
+ *       position as "virtually visited" so they select a different frontier.
  */
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
-#include <nav_msgs/msg/odometry.hpp>
-#include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <multi_explore_mapping/sensor_processor.hpp>
+#include <multi_explore_mapping/voronoi_partition.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -26,59 +32,72 @@
 #include <string>
 #include <vector>
 
-using NavigateToPose = nav2_msgs::action::NavigateToPose;
-using GoalHandleNav  = rclcpp_action::ClientGoalHandle<NavigateToPose>;
-
-class SensorMbExploreNode : public rclcpp::Node {
+class SensorExploreNode : public rclcpp::Node {
 public:
-    SensorMbExploreNode() : Node("sensor_mb_explore") {
-        declare_parameter("safe_distance",     0.5);
-        declare_parameter("robot_radius",      0.13);
-        declare_parameter("dup_radius",         1.5);
-        declare_parameter("dup_time",         600.0);
-        declare_parameter("frontier_ttl",     300.0);
-        declare_parameter("min_gap_width",      0.4);
-        declare_parameter("odom_frame",   std::string("map"));
+    SensorExploreNode()
+    : Node("sensor_explore"),
+      tf_buffer_(this->get_clock()),
+      tf_listener_(tf_buffer_)
+    {
+        declare_parameter("linear_speed",    0.2);
+        declare_parameter("angular_speed",   0.6);
+        declare_parameter("safe_distance",   0.5);
+        declare_parameter("vfh_threshold",   1.5);
+        declare_parameter("valley_min_deg", 30.0);
+        declare_parameter("emergency_dist",  0.1);
+        declare_parameter("robot_radius",   0.089);
+        declare_parameter("dup_radius",      1.5);
+        declare_parameter("dup_time",      600.0);   // match 10-min history window
+        declare_parameter("frontier_ttl",  300.0);
+        declare_parameter("front_cone_deg", 30.0);
+        declare_parameter("min_gap_width",   0.4);
+        declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
-        declare_parameter("progress_timeout",  60.0);
-        declare_parameter("goal_tolerance",     0.5);
-        declare_parameter("blacklist_radius",   1.0);
+        declare_parameter("use_voronoi_partition", true);
 
-        safe_             = get_parameter("safe_distance").as_double();
-        robot_r_          = get_parameter("robot_radius").as_double();
-        dup_r_            = get_parameter("dup_radius").as_double();
-        dup_t_            = get_parameter("dup_time").as_double();
-        frontier_ttl_     = get_parameter("frontier_ttl").as_double();
-        min_gap_w_        = get_parameter("min_gap_width").as_double();
-        odom_frame_       = get_parameter("odom_frame").as_string();
-        global_frame_     = get_parameter("global_frame").as_string();
-        progress_timeout_ = get_parameter("progress_timeout").as_double();
-        goal_tol_         = get_parameter("goal_tolerance").as_double();
-        blacklist_r_      = get_parameter("blacklist_radius").as_double();
-
-        ns_ = get_namespace();
+        lin_          = get_parameter("linear_speed").as_double();
+        ang_          = get_parameter("angular_speed").as_double();
+        safe_         = get_parameter("safe_distance").as_double();
+        vfh_t_        = get_parameter("vfh_threshold").as_double();
+        v_deg_        = get_parameter("valley_min_deg").as_double();
+        emerg_        = get_parameter("emergency_dist").as_double();
+        robot_r_      = get_parameter("robot_radius").as_double();
+        dup_r_        = get_parameter("dup_radius").as_double();
+        dup_t_        = get_parameter("dup_time").as_double();
+        frontier_ttl_ = get_parameter("frontier_ttl").as_double();
+        fcone_        = get_parameter("front_cone_deg").as_double();
+        min_gap_w_    = get_parameter("min_gap_width").as_double();
+        odom_frame_   = get_parameter("odom_frame").as_string();
+        global_frame_ = get_parameter("global_frame").as_string();
+        use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
             [this](sensor_msgs::msg::LaserScan::SharedPtr m) {
                 latest_scan_ = *m; has_scan_ = true;
             });
-        odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "odom", rclcpp::SensorDataQoS(),
-            [this](nav_msgs::msg::Odometry::SharedPtr m) { on_odom(*m); });
 
+        cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+
+        ns_ = get_namespace();
+        robot_base_frame_ =
+            (!ns_.empty() && ns_.front() == '/' ? ns_.substr(1) : ns_) + "/base_footprint";
+
+        // Multi-robot: pose trail (1 Hz)
         pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
             "/shared_exploration_poses", rclcpp::SystemDefaultsQoS());
         peer_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
             "/shared_exploration_poses", rclcpp::SystemDefaultsQoS(),
             [this](geometry_msgs::msg::PoseStamped::SharedPtr m) { on_peer_pose(*m); });
 
+        // Multi-robot: frontier sharing (1 Hz)
         frontier_pub_ = create_publisher<geometry_msgs::msg::PoseArray>(
             "/shared_frontiers", rclcpp::SystemDefaultsQoS());
         frontier_peer_sub_ = create_subscription<geometry_msgs::msg::PoseArray>(
             "/shared_frontiers", rclcpp::SystemDefaultsQoS(),
             [this](geometry_msgs::msg::PoseArray::SharedPtr m) { on_peer_frontiers(*m); });
 
+        // Multi-robot: navigation target claim (5 Hz)
         target_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
             "/shared_targets", rclcpp::SystemDefaultsQoS());
         target_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -88,31 +107,47 @@ public:
         viz_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
             "exploration_markers", rclcpp::SystemDefaultsQoS());
 
-        nav_client_ = rclcpp_action::create_client<NavigateToPose>(
-            this, "navigate_to_pose");
+        // ボロノイ担当領域マスク（voronoi_partition_node が配信）。
+        // 相対トピック名なので、名前空間下では自動的に <ns>/voronoi_mask に解決される。
+        if (use_voronoi_) {
+            voronoi_mask_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+                "voronoi_mask",
+                rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
+                [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { voronoi_mask_ = m; });
+        }
 
         timer_ = create_wall_timer(
-            std::chrono::milliseconds(200),
-            [this]() { exploration_loop(); });
+            std::chrono::milliseconds(100),
+            [this]() { control_loop(); });
+
         share_timer_ = create_wall_timer(
             std::chrono::seconds(1),
             [this]() { publish_pose(); publish_frontiers(); });
+
         target_timer_ = create_wall_timer(
-            std::chrono::milliseconds(200),
+            std::chrono::milliseconds(200),   // 5 Hz
             [this]() { publish_target(); });
+
         viz_timer_ = create_wall_timer(
             std::chrono::milliseconds(500),
             [this]() { publish_markers(); });
 
         RCLCPP_INFO(get_logger(),
-            "sensor_mb_explore: safe=%.2f r=%.3f dup_r=%.1f gap_w=%.2f timeout=%.0fs ns=%s",
-            safe_, robot_r_, dup_r_, min_gap_w_, progress_timeout_, ns_.c_str());
+            "sensor_explore: safe=%.2f r=%.3f emerg=%.2f "
+            "dup_r=%.1f dup_t=%.0f gap_w=%.2f ns=%s",
+            safe_, robot_r_, emerg_, dup_r_, dup_t_, min_gap_w_, ns_.c_str());
     }
 
 private:
-    double safe_, robot_r_, dup_r_, dup_t_, frontier_ttl_, min_gap_w_;
-    double progress_timeout_, goal_tol_, blacklist_r_;
-    std::string odom_frame_, global_frame_, ns_;
+    double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
+    double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
+    std::string odom_frame_;
+    bool use_voronoi_;
+    nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
+    std::string global_frame_;
+    std::string robot_base_frame_;
+    tf2_ros::Buffer tf_buffer_;
+    tf2_ros::TransformListener tf_listener_;
 
     sensor_msgs::msg::LaserScan latest_scan_;
     bool has_scan_ = false;
@@ -123,57 +158,91 @@ private:
     Pose pose_{};
     bool has_odom_ = false;
 
-    std::vector<OdomPt>                        history_;
+    std::vector<OdomPt> history_;
     std::map<std::string, std::vector<OdomPt>> peer_histories_;
-    std::map<std::string, OdomPt>              peer_targets_;
+
+    // Per-peer latest claimed navigation target.
+    // Stored as OdomPt for the timestamp; only the latest target per peer is kept.
+    std::map<std::string, OdomPt> peer_targets_;
+
+    std::string ns_;
 
     double target_x_{0.0}, target_y_{0.0};
     bool   has_target_{false};
 
-    struct Frontier   { double x, y, t, width; };
-    struct BlackEntry { double x, y, t; };
+    // ------------------------------------------------------------------
+    // Persistent frontier store
 
-    std::vector<Frontier>   frontier_store_;
-    std::vector<BlackEntry> blacklist_;
+    struct Frontier {
+        double x, y;    // world coordinates [m]
+        double t;       // discovery time [s]
+        double width;   // gap opening width [m]
+    };
+    std::vector<Frontier> frontier_store_;
 
-    // Nav2 action client
-    rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
-    GoalHandleNav::SharedPtr current_goal_handle_;
-    enum class NavState { IDLE, MOVING } nav_state_{NavState::IDLE};
-    rclcpp::Time goal_sent_time_;
-    double current_goal_x_{0.0}, current_goal_y_{0.0};
-
+    // ------------------------------------------------------------------
     // ROS handles
+
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr      scan_sub_;
-    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr          odom_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  peer_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr    frontier_peer_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  target_sub_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     voronoi_mask_sub_;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr           cmd_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr       frontier_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     target_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr viz_pub_;
-    rclcpp::TimerBase::SharedPtr timer_, share_timer_, target_timer_, viz_timer_;
+    rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr share_timer_;
+    rclcpp::TimerBase::SharedPtr target_timer_;
+    rclcpp::TimerBase::SharedPtr viz_timer_;
 
     // ------------------------------------------------------------------
-    // Odometry
+    // World-frame pose (TF: global_frame_ -> robot_base_frame_)
+    //
+    // Uses TF rather than the raw /odom topic: /odom is dead-reckoning
+    // relative to each robot's own spawn point, not the shared "map" frame.
+    // Everything below (frontier_store_, the /shared_* topics consumed by
+    // peers, and the Voronoi territory check) compares positions across
+    // robots or against the merged map, so it needs a common frame.
 
-    void on_odom(const nav_msgs::msg::Odometry& msg) {
-        const double x   = msg.pose.pose.position.x;
-        const double y   = msg.pose.pose.position.y;
-        const auto&  q   = msg.pose.pose.orientation;
-        const double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
-                                      1.0 - 2.0 * (q.y * q.y + q.z * q.z));
-        pose_ = {x, y, yaw}; has_odom_ = true;
+    bool update_world_pose() {
+        try {
+            const auto tf = tf_buffer_.lookupTransform(
+                global_frame_, robot_base_frame_, tf2::TimePointZero, tf2::durationFromSec(0.1));
+            const auto& t = tf.transform.translation;
+            const auto& q = tf.transform.rotation;
+            pose_.x   = t.x;
+            pose_.y   = t.y;
+            pose_.yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                   1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+            has_odom_ = true;
 
-        const double t = now().seconds(), cutoff = t - 600.0;
-        history_.push_back({x, y, t});
-        history_.erase(std::remove_if(history_.begin(), history_.end(),
-            [cutoff](const OdomPt& p) { return p.t < cutoff; }), history_.end());
+            const double t_now  = now().seconds();
+            const double cutoff = t_now - 600.0;
+            history_.push_back({pose_.x, pose_.y, t_now});
+            history_.erase(
+                std::remove_if(history_.begin(), history_.end(),
+                    [cutoff](const OdomPt& p) { return p.t < cutoff; }),
+                history_.end());
+            return true;
+        } catch (const tf2::TransformException& e) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+                "TF %s -> %s unavailable: %s",
+                global_frame_.c_str(), robot_base_frame_.c_str(), e.what());
+            has_odom_ = false;
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------
-    // Frontier management
+    // Visited / claimed check
+    //
+    // A world position counts as "handled" when:
+    //   (a) this robot was within dup_r_ of it within the last dup_t_ seconds
+    //   (b) a peer was within dup_r_ of it within the last dup_t_ seconds
+    //   (c) a peer has CLAIMED it as its current navigation goal
 
     bool is_visited(double wx, double wy) const {
         const double t_now = now().seconds();
@@ -190,19 +259,19 @@ private:
         return false;
     }
 
-    bool is_blacklisted(double wx, double wy) const {
-        const double t_now = now().seconds();
-        for (const auto& b : blacklist_)
-            if (std::hypot(wx - b.x, wy - b.y) < blacklist_r_ && t_now - b.t < 120.0)
-                return true;
-        return false;
-    }
-
     void add_frontier(double wx, double wy, double width = 1.0) {
         if (is_visited(wx, wy)) return;
         for (const auto& f : frontier_store_)
             if (std::hypot(wx - f.x, wy - f.y) < dup_r_ * 0.5) return;
         frontier_store_.push_back({wx, wy, now().seconds(), width});
+    }
+
+    // respect_territory=true のときのみボロノイセル外を弾く。マスク未受信、
+    // または use_voronoi_=false のときは常に true（制約なし）を返す。
+    bool in_own_territory(double wx, double wy, bool respect_territory) const {
+        if (!respect_territory || !use_voronoi_) return true;
+        if (!voronoi_mask_) return false;
+        return voronoi::in_own_territory(*voronoi_mask_, wx, wy);
     }
 
     void prune_frontiers() {
@@ -216,7 +285,7 @@ private:
     }
 
     // ------------------------------------------------------------------
-    // Multi-robot coordination
+    // Multi-robot: pose trail sharing (1 Hz)
 
     void publish_pose() {
         if (!has_odom_) return;
@@ -234,9 +303,14 @@ private:
         auto& hist = peer_histories_[msg.header.frame_id];
         hist.push_back({msg.pose.position.x, msg.pose.position.y, t});
         const double cutoff = t - 600.0;
-        hist.erase(std::remove_if(hist.begin(), hist.end(),
-            [cutoff](const OdomPt& p) { return p.t < cutoff; }), hist.end());
+        hist.erase(
+            std::remove_if(hist.begin(), hist.end(),
+                [cutoff](const OdomPt& p) { return p.t < cutoff; }),
+            hist.end());
     }
+
+    // ------------------------------------------------------------------
+    // Multi-robot: frontier sharing (1 Hz)
 
     void publish_frontiers() {
         if (frontier_store_.empty()) return;
@@ -245,7 +319,8 @@ private:
         msg.header.frame_id = ns_;
         for (const auto& f : frontier_store_) {
             geometry_msgs::msg::Pose p;
-            p.position.x = f.x; p.position.y = f.y;
+            p.position.x = f.x;
+            p.position.y = f.y;
             msg.poses.push_back(p);
         }
         frontier_pub_->publish(msg);
@@ -256,6 +331,9 @@ private:
         for (const auto& p : msg.poses)
             add_frontier(p.position.x, p.position.y, 1.0);
     }
+
+    // ------------------------------------------------------------------
+    // Multi-robot: navigation target claim (5 Hz)
 
     void publish_target() {
         if (!has_target_) return;
@@ -275,130 +353,112 @@ private:
     }
 
     // ------------------------------------------------------------------
-    // Nav2 action
+    // Control loop (10 Hz)
 
-    void send_nav_goal(double x, double y) {
-        if (!nav_client_->wait_for_action_server(std::chrono::milliseconds(500))) {
+    void control_loop() {
+        if (!has_scan_) {
             RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-                "navigate_to_pose server not available");
+                "Waiting for LiDAR data...");
             return;
         }
 
-        auto goal                         = NavigateToPose::Goal{};
-        goal.pose.header.frame_id         = global_frame_;
-        goal.pose.header.stamp            = now();
-        goal.pose.pose.position.x         = x;
-        goal.pose.pose.position.y         = y;
-        goal.pose.pose.orientation.w      = 1.0;
+        update_world_pose();  // failure leaves has_odom_=false; pose-dependent
+                               // sections below already guard on has_odom_
 
-        auto opts = rclcpp_action::Client<NavigateToPose>::SendGoalOptions{};
-        opts.goal_response_callback =
-            [this](const GoalHandleNav::SharedPtr& gh) {
-                if (!gh) {
-                    RCLCPP_WARN(get_logger(), "Goal rejected by Nav2");
-                    nav_state_ = NavState::IDLE;
-                    return;
-                }
-                current_goal_handle_ = gh;
-            };
-        opts.result_callback =
-            [this](const GoalHandleNav::WrappedResult& res) {
-                using Code = rclcpp_action::ResultCode;
-                if (res.code == Code::ABORTED) {
-                    RCLCPP_WARN(get_logger(),
-                        "Nav2 aborted (%.2f, %.2f) — blacklisting for 120s",
-                        current_goal_x_, current_goal_y_);
-                    blacklist_.push_back({current_goal_x_, current_goal_y_, now().seconds()});
-                }
-                nav_state_ = NavState::IDLE;
-                current_goal_handle_.reset();
-            };
-
-        nav_client_->async_send_goal(goal, opts);
-        current_goal_x_ = x;
-        current_goal_y_ = y;
-        goal_sent_time_ = now();
-        nav_state_      = NavState::MOVING;
-        target_x_   = x;
-        target_y_   = y;
-        has_target_ = true;
-        RCLCPP_INFO(get_logger(), "Nav goal → (%.2f, %.2f)", x, y);
-    }
-
-    // ------------------------------------------------------------------
-    // Exploration loop (5 Hz)
-
-    void exploration_loop() {
-        if (!has_scan_ || !has_odom_) return;
-
-        // Gap detection: reuse sensor_proc::process; only gap_targets are used here.
-        // VFH outputs are discarded — obstacle avoidance is delegated to Nav2.
         const auto ps = sensor_proc::process(
-            latest_scan_, safe_, 1.5, 30.0, 0.1, 0.6, robot_r_, 30.0, min_gap_w_);
-        for (const auto& [a, d, w] : ps.gap_targets) {
-            const double wa = pose_.yaw + a;
-            add_frontier(pose_.x + d * std::cos(wa), pose_.y + d * std::sin(wa), w);
-        }
-        prune_frontiers();
+            latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_,
+            robot_r_, fcone_, min_gap_w_);
 
-        // While Nav2 is driving, only watch for the progress timeout
-        if (nav_state_ == NavState::MOVING) {
-            if ((now() - goal_sent_time_).seconds() > progress_timeout_) {
-                RCLCPP_WARN(get_logger(), "Progress timeout — cancelling (%.2f, %.2f)",
-                    current_goal_x_, current_goal_y_);
-                if (current_goal_handle_)
-                    nav_client_->async_cancel_goal(current_goal_handle_);
-                blacklist_.push_back({current_goal_x_, current_goal_y_, now().seconds()});
-                nav_state_ = NavState::IDLE;
-                current_goal_handle_.reset();
+        // Convert gap targets (robot-frame polar + width) to world frontiers
+        if (has_odom_) {
+            for (const auto& [a, d, w] : ps.gap_targets) {
+                const double wa = pose_.yaw + a;
+                add_frontier(pose_.x + d * std::cos(wa),
+                             pose_.y + d * std::sin(wa), w);
             }
-            return;
+            prune_frontiers();
         }
 
-        // IDLE: select best unvisited, non-blacklisted frontier
-        // Cost: |bearing| + 0.25*dist − 0.3*width + peer_proximity_penalty
-        double best_cost = std::numeric_limits<double>::max();
-        double best_fx = 0.0, best_fy = 0.0;
-        bool   found = false;
+        geometry_msgs::msg::Twist cmd;
 
-        for (const auto& f : frontier_store_) {
-            if (is_visited(f.x, f.y))    continue;
-            if (is_blacklisted(f.x, f.y)) continue;
+        if (ps.emergency) {
+            cmd.angular.z = ps.avoidance_angular_z;
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                "EMERGENCY: obstacle inside %.2fm fence", emerg_);
 
-            const double dx   = f.x - pose_.x;
-            const double dy   = f.y - pose_.y;
-            const double raw  = std::atan2(dy, dx) - pose_.yaw;
-            const double ang  = std::atan2(std::sin(raw), std::cos(raw));
-            const double dist = std::hypot(dx, dy);
-            double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+        } else if (!ps.front_blocked) {
+            // Select best frontier: cost = |bearing| + 0.25*dist − 0.3*width + peer_penalty
+            // Prefer forward + nearby + wide openings; penalize frontiers near peer positions.
+            double best_angle = 0.0;
+            double best_cost  = std::numeric_limits<double>::max();
+            double best_fx = 0.0, best_fy = 0.0;
+            bool   found = false;
 
-            // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
-            const double avoid_r = dup_r_ * 2.0;
-            for (const auto& [peer_ns, hist] : peer_histories_) {
-                if (hist.empty()) continue;
-                const auto& p  = hist.back();
-                const double d = std::hypot(f.x - p.x, f.y - p.y);
-                if (d < avoid_r)
-                    cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
+            if (has_odom_) {
+                // Voronoi有効時は自分の担当範囲だけを候補にする。
+                // マスク未受信・自領域に候補なしなら次の更新まで待つ。
+                const bool respect_territory = use_voronoi_;
+                for (const auto& f : frontier_store_) {
+                    if (is_visited(f.x, f.y)) continue;
+                    if (!in_own_territory(f.x, f.y, respect_territory)) continue;
+
+                    const double dx   = f.x - pose_.x;
+                    const double dy   = f.y - pose_.y;
+                    const double raw  = std::atan2(dy, dx) - pose_.yaw;
+                    const double ang  = std::atan2(std::sin(raw), std::cos(raw));
+                    const double dist = std::hypot(dx, dy);
+                    double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+
+                    // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
+                    const double avoid_r = dup_r_ * 2.0;
+                    for (const auto& [peer_ns, hist] : peer_histories_) {
+                        if (hist.empty()) continue;
+                        const auto& p  = hist.back();
+                        const double d = std::hypot(f.x - p.x, f.y - p.y);
+                        if (d < avoid_r)
+                            cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
+                    }
+
+                    if (cost < best_cost) {
+                        best_cost  = cost;
+                        best_angle = ang;
+                        best_fx    = f.x;
+                        best_fy    = f.y;
+                        found      = true;
+                    }
+                }
+                if (found) {
+                    target_x_   = best_fx;
+                    target_y_   = best_fy;
+                    has_target_ = true;
+                }
             }
 
-            if (cost < best_cost) {
-                best_cost = cost; best_fx = f.x; best_fy = f.y; found = true;
-            }
+            cmd.linear.x = lin_;
+            if (std::abs(best_angle) > 0.15)
+                cmd.angular.z = ang_ * 0.4 * (best_angle > 0.0 ? 1.0 : -1.0);
+
+        } else {
+            cmd.angular.z = ps.avoidance_angular_z;
+            RCLCPP_DEBUG(get_logger(), "blocked: steer=%.2f", cmd.angular.z);
         }
 
-        if (found && std::hypot(best_fx - pose_.x, best_fy - pose_.y) > goal_tol_)
-            send_nav_goal(best_fx, best_fy);
+        cmd_pub_->publish(cmd);
     }
 
     // ------------------------------------------------------------------
-    // Visualization (same as sensor_explore_node)
+    // Visualization (2 Hz)
+    //
+    //   ns_/path        LINE_STRIP  own odometry trail
+    //   ns_/frontiers   SPHERE_LIST frontier store (yellow=fresh → grey=aged)
+    //   ns_/target      SPHERE      current nav goal (magenta)
+    //   peer_ns/path    LINE_STRIP  peer trails (semi-transparent)
 
     static visualization_msgs::msg::Marker::_color_type
     ns_color(const std::string& ns, float alpha = 1.0f) {
         static const std::array<std::array<float, 3>, 5> pal = {{
             {0.3f, 0.5f, 1.0f}, {0.2f, 0.85f, 0.3f}, {1.0f, 0.35f, 0.35f},
-            {1.0f, 0.6f, 0.1f}, {0.75f, 0.3f, 0.9f},
+            {1.0f, 0.6f,  0.1f}, {0.75f, 0.3f, 0.9f},
         }};
         const size_t idx = std::hash<std::string>{}(ns) % pal.size();
         visualization_msgs::msg::Marker::_color_type c;
@@ -416,9 +476,10 @@ private:
             visualization_msgs::msg::Marker m;
             m.header.stamp    = stamp;
             m.header.frame_id = odom_frame_;
-            m.ns = marker_ns; m.id = id++;
-            m.type   = type;
-            m.action = visualization_msgs::msg::Marker::ADD;
+            m.ns      = marker_ns;
+            m.id      = id++;
+            m.type    = type;
+            m.action  = visualization_msgs::msg::Marker::ADD;
             m.lifetime = lifetime;
             return m;
         };
@@ -427,12 +488,14 @@ private:
         {
             using M = visualization_msgs::msg::Marker;
             auto m  = make_base(M::LINE_STRIP, ns_ + "/path");
-            m.scale.x = 0.03; m.color = ns_color(ns_);
+            m.scale.x = 0.03;
+            m.color   = ns_color(ns_);
             double lx = std::numeric_limits<double>::max(), ly = 0.0;
             for (const auto& p : history_) {
                 if (std::hypot(p.x - lx, p.y - ly) < 0.1) continue;
                 geometry_msgs::msg::Point pt;
-                pt.x = p.x; pt.y = p.y; pt.z = 0.05; m.points.push_back(pt);
+                pt.x = p.x; pt.y = p.y; pt.z = 0.05;
+                m.points.push_back(pt);
                 lx = p.x; ly = p.y;
             }
             if (m.points.size() >= 2) arr.markers.push_back(m);
@@ -446,7 +509,8 @@ private:
             const double t_now = now().seconds();
             for (const auto& f : frontier_store_) {
                 geometry_msgs::msg::Point pt;
-                pt.x = f.x; pt.y = f.y; pt.z = 0.12; m.points.push_back(pt);
+                pt.x = f.x; pt.y = f.y; pt.z = 0.12;
+                m.points.push_back(pt);
                 const float age = static_cast<float>(
                     std::min(1.0, (t_now - f.t) / frontier_ttl_));
                 visualization_msgs::msg::Marker::_color_type c;
@@ -474,10 +538,12 @@ private:
         for (const auto& [peer_ns, hist] : peer_histories_) {
             using M = visualization_msgs::msg::Marker;
             auto m  = make_base(M::LINE_STRIP, peer_ns + "/path");
-            m.scale.x = 0.03; m.color = ns_color(peer_ns, 0.6f);
+            m.scale.x = 0.03;
+            m.color   = ns_color(peer_ns, 0.6f);
             for (const auto& p : hist) {
                 geometry_msgs::msg::Point pt;
-                pt.x = p.x; pt.y = p.y; pt.z = 0.05; m.points.push_back(pt);
+                pt.x = p.x; pt.y = p.y; pt.z = 0.05;
+                m.points.push_back(pt);
             }
             if (m.points.size() >= 2) arr.markers.push_back(m);
         }
@@ -488,6 +554,6 @@ private:
 
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SensorMbExploreNode>());
+    rclcpp::spin(std::make_shared<SensorExploreNode>());
     rclcpp::shutdown();
 }

@@ -38,6 +38,7 @@ public:
         this->declare_parameter<double>("min_frontier_size", 0.3);
         this->declare_parameter<double>("potential_scale", 1.0);
         this->declare_parameter<double>("gain_scale", 3.0);
+        this->declare_parameter<double>("backward_penalty_scale", 1.0);
         this->declare_parameter<bool>("visualize", true);
         this->declare_parameter<double>("blacklist_radius", 1.0);
         this->declare_parameter<double>("blacklist_clear_sec", 60.0);
@@ -52,6 +53,7 @@ public:
         min_frontier_size_ = this->get_parameter("min_frontier_size").as_double();
         potential_scale_   = this->get_parameter("potential_scale").as_double();
         gain_scale_        = this->get_parameter("gain_scale").as_double();
+        backward_penalty_scale_ = this->get_parameter("backward_penalty_scale").as_double();
         visualize_         = this->get_parameter("visualize").as_bool();
         blacklist_radius_  = this->get_parameter("blacklist_radius").as_double();
         blacklist_clear_sec_ = this->get_parameter("blacklist_clear_sec").as_double();
@@ -118,9 +120,10 @@ public:
         last_blacklist_clear_ = this->now();
 
         RCLCPP_INFO(this->get_logger(),
-            "FrontierExplorer ready | base=%s global=%s gain=%.1f potential=%.1f min_size=%.2fm",
+            "FrontierExplorer ready | base=%s global=%s gain=%.1f potential=%.1f "
+            "backward_penalty=%.1f min_size=%.2fm",
             robot_base_frame_.c_str(), global_frame_.c_str(),
-            gain_scale_, potential_scale_, min_frontier_size_);
+            gain_scale_, potential_scale_, backward_penalty_scale_, min_frontier_size_);
     }
 
 private:
@@ -149,6 +152,7 @@ private:
     double min_frontier_size_;
     double potential_scale_;
     double gain_scale_;
+    double backward_penalty_scale_;
     bool visualize_;
     double blacklist_radius_;
     double blacklist_clear_sec_;
@@ -239,6 +243,80 @@ private:
             }
         }
         return frontier_cells;
+    }
+
+    // ----------------------------------------------------------------
+    // 到達可能フィルタ: ロボット位置から既知の自由セルだけをたどって
+    // 到達できるフロンティアセルのみ残す。壁の向こう側の未知領域に接する
+    // だけのフロンティア(経路が存在しない)を選択前に除外する。
+    // 斜め移動は両脇の直交セルが通行可能な場合のみ許可(壁の角抜け防止)。
+    // ----------------------------------------------------------------
+    std::vector<Cell> filter_reachable_cells(
+        const std::vector<Cell> &cells,
+        const nav_msgs::msg::OccupancyGrid &map,
+        double robot_x, double robot_y)
+    {
+        const int W = static_cast<int>(map.info.width);
+        const int H = static_cast<int>(map.info.height);
+        const double res = map.info.resolution;
+        const double ox = map.info.origin.position.x;
+        const double oy = map.info.origin.position.y;
+
+        auto passable = [&](int x, int y) {
+            if (x < 0 || x >= W || y < 0 || y >= H) return false;
+            const int8_t v = map.data[y * W + x];
+            // 99 = Nav2のinscribed(壁からロボット半径以内=中心が入れない)。
+            // ここまで通行不可にすることで、壁の1セル欠けや壁際の高コスト帯
+            // 経由で壁の向こう側へ漏れる経路を塞ぐ(Nav2プランナーの通行判定と同じ)。
+            return v != -1 && v < 99;
+        };
+
+        const int rx = static_cast<int>(std::floor((robot_x - ox) / res));
+        const int ry = static_cast<int>(std::floor((robot_y - oy) / res));
+
+        // ロボットのセルが障害物/範囲外にかかっている場合は、近傍の通行可能セルを起点にする
+        int sx = -1, sy = -1;
+        const int kSearch = 10;
+        int best_d2 = std::numeric_limits<int>::max();
+        for (int dy = -kSearch; dy <= kSearch; ++dy) {
+            for (int dx = -kSearch; dx <= kSearch; ++dx) {
+                const int d2 = dx * dx + dy * dy;
+                if (d2 < best_d2 && passable(rx + dx, ry + dy)) {
+                    best_d2 = d2; sx = rx + dx; sy = ry + dy;
+                }
+            }
+        }
+        if (sx < 0) {
+            RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                "Robot is not on/near a known free cell; skipping reachability filter");
+            return cells;
+        }
+
+        std::vector<bool> reach(static_cast<size_t>(W) * H, false);
+        std::queue<Cell> q;
+        reach[sy * W + sx] = true;
+        q.push({sx, sy});
+
+        const int dxs[] = {1,-1, 0, 0, 1, 1,-1,-1};
+        const int dys[] = {0, 0, 1,-1, 1,-1, 1,-1};
+        while (!q.empty()) {
+            Cell c = q.front(); q.pop();
+            for (int d = 0; d < 8; ++d) {
+                const int nx = c.x + dxs[d], ny = c.y + dys[d];
+                if (!passable(nx, ny) || reach[ny * W + nx]) continue;
+                if (dxs[d] != 0 && dys[d] != 0 &&
+                    (!passable(c.x + dxs[d], c.y) || !passable(c.x, c.y + dys[d])))
+                    continue;
+                reach[ny * W + nx] = true;
+                q.push({nx, ny});
+            }
+        }
+
+        std::vector<Cell> out;
+        out.reserve(cells.size());
+        for (const auto &c : cells)
+            if (reach[c.y * W + c.x]) out.push_back(c);
+        return out;
     }
 
     // ----------------------------------------------------------------
@@ -340,7 +418,8 @@ private:
 
     // respect_territory=true のときは、自分のボロノイセル外
     // （voronoi_mask の値が 50/100 でない候補）を選択肢から除外する。
-    Frontier* select_best_frontier(std::vector<Frontier> &frontiers, double robot_x, double robot_y,
+    Frontier* select_best_frontier(std::vector<Frontier> &frontiers,
+                                   double robot_x, double robot_y, double robot_yaw,
                                    bool respect_territory) {
         Frontier *best = nullptr;
         double best_score = -std::numeric_limits<double>::infinity();
@@ -356,9 +435,21 @@ private:
             // 距離の計算（安全のため最小値を0.1mに制限）
             double dist = std::max(0.1, std::hypot(f.centroid_x - robot_x, f.centroid_y - robot_y));
 
+            // 既存の利得・距離評価は保ち、進行方向に対して後方の候補だけ減点する。
+            // 横〜前方の候補には影響させず、真後ろほど減点を大きくする。
+            const double bearing = std::atan2(f.centroid_y - robot_y,
+                                              f.centroid_x - robot_x);
+            const double heading_error = std::abs(std::atan2(
+                std::sin(bearing - robot_yaw), std::cos(bearing - robot_yaw)));
+            constexpr double kHalfPi = 1.5707963267948966;
+            const double backward_ratio = std::max(0.0,
+                (heading_error - kHalfPi) / kHalfPi);
+            const double backward_penalty = backward_penalty_scale_ * backward_ratio;
+
             // sizeをそのまま使うと外壁など巨大フロンティアが距離ペナルティを圧倒する。
             // log(1+size) でスケールを抑制し、近くの中型フロンティアも競争できるようにする。
-            f.score = (gain_scale_ * std::log(1.0 + f.size)) - (potential_scale_ * dist);
+            f.score = (gain_scale_ * std::log(1.0 + f.size)) -
+                      (potential_scale_ * dist) - backward_penalty;
 
             if (f.score > best_score) {
                 best_score = f.score;
@@ -368,24 +459,23 @@ private:
         return best;
     }
 
-    // ボロノイ制約ありで探して見つからなければ、制約なしにフォールバック
-    // する（自分のセルにフロンティアが1つも残っていない場合の逃げ道）。
-    Frontier* select_frontier_with_fallback(std::vector<Frontier> &frontiers,
-                                            double robot_x, double robot_y) {
-        if (!use_voronoi_ || !voronoi_mask_)
-            return select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/false);
-
-        Frontier *best = select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/true);
-        if (!best) {
-            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
-                "No frontier inside own Voronoi territory — falling back to global best "
-                "until next partition recompute");
-            best = select_best_frontier(frontiers, robot_x, robot_y, /*respect_territory=*/false);
+    // ボロノイ制約を有効にした場合は、マスクが届いていない間も含めて
+    // 自分の担当領域内だけから選ぶ。担当領域に候補がなければ待つ。
+    Frontier* select_frontier_in_territory(std::vector<Frontier> &frontiers,
+                                           double robot_x, double robot_y, double robot_yaw) {
+        if (!use_voronoi_)
+            return select_best_frontier(frontiers, robot_x, robot_y, robot_yaw,
+                                        /*respect_territory=*/false);
+        if (!voronoi_mask_) {
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                "Waiting for Voronoi mask; refusing to select an unassigned frontier");
+            return nullptr;
         }
-        return best;
+        return select_best_frontier(frontiers, robot_x, robot_y, robot_yaw,
+                                    /*respect_territory=*/true);
     }
 
-    bool get_robot_pose(double &x, double &y) {
+    bool get_robot_pose(double &x, double &y, double &yaw) {
         try {
             auto tf = tf_buffer_.lookupTransform(
                 global_frame_, robot_base_frame_,
@@ -393,6 +483,9 @@ private:
                 tf2::durationFromSec(0.5));
             x = tf.transform.translation.x;
             y = tf.transform.translation.y;
+            const auto &q = tf.transform.rotation;
+            yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y),
+                             1.0 - 2.0 * (q.y * q.y + q.z * q.z));
             return true;
         } catch (const tf2::TransformException &e) {
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
@@ -619,8 +712,8 @@ private:
             return;
         }
 
-        double robot_x, robot_y;
-        if (!get_robot_pose(robot_x, robot_y)) return;
+        double robot_x, robot_y, robot_yaw;
+        if (!get_robot_pose(robot_x, robot_y, robot_yaw)) return;
 
         // 進捗タイムアウト監視
         if (state_ == State::MOVING) {
@@ -636,10 +729,14 @@ private:
 
         // フロンティア検出とクラスタリング
         auto frontier_cells = detect_frontier_cells(*current_map_);
+        const size_t detected_count = frontier_cells.size();
+        frontier_cells = filter_reachable_cells(frontier_cells, *current_map_, robot_x, robot_y);
 
         if (frontier_cells.empty()) {
-            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
-                "No frontier cells in costmap. Map exploration might be completed.");
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+                "No reachable frontier cells (detected=%zu, reachable=0). "
+                "Either exploration is complete or every frontier is walled off.",
+                detected_count);
             return;
         }
 
@@ -650,37 +747,55 @@ private:
             double gx = current_goal_.pose.position.x;
             double gy = current_goal_.pose.position.y;
 
-            // 現在目指しているゴールの近傍（1.0m以内）にまだ未探索フロンティアが存在するか
+            // 現在目指しているゴールの近傍にfrontierが残り、かつ最新の
+            // Voronoiマスクでも自分の担当領域なら、現在の走行を続ける。
+            const bool current_goal_in_territory = !use_voronoi_ ||
+                (voronoi_mask_ && voronoi::in_own_territory(
+                    *voronoi_mask_, gx, gy));
             bool current_frontier_still_exists = false;
-            for (const auto &f : frontiers) {
-                if (std::hypot(f.centroid_x - gx, f.centroid_y - gy) < 1.0) {
-                    current_frontier_still_exists = true;
-                    break;
+            if (current_goal_in_territory) {
+                for (const auto &f : frontiers) {
+                    if (std::hypot(f.centroid_x - gx, f.centroid_y - gy) < 1.0) {
+                        current_frontier_still_exists = true;
+                        break;
+                    }
                 }
             }
 
             // フロンティアが残っているなら、余計な再計画をせずに直進を維持
             if (current_frontier_still_exists) {
-                Frontier *best = select_frontier_with_fallback(frontiers, robot_x, robot_y);
+                Frontier *best = select_frontier_in_territory(
+                    frontiers, robot_x, robot_y, robot_yaw);
                 publish_frontiers(frontiers, best);
                 return;
             } else {
-                // 他のロボットに開拓されて消滅、あるいは障害物で埋まった場合は即座に次へ切り替え
-                RCLCPP_INFO(this->get_logger(), "Current target vanished or cleared by other robot. Replanning...");
+                // frontier消滅・障害物化・担当境界の移動のいずれでも、
+                // 現在のゴールが担当外になったらキャンセルして再選択する。
+                RCLCPP_INFO(this->get_logger(),
+                    "Current target vanished or left own territory. Replanning...");
                 cancel_current_goal();
             }
         }
         // ──────────────────────────────────────
 
         // ベストなフロンティアを選択
-        Frontier *best = select_frontier_with_fallback(frontiers, robot_x, robot_y);
+        Frontier *best = select_frontier_in_territory(
+            frontiers, robot_x, robot_y, robot_yaw);
 
         if (!best) {
-            long valid_count = std::count_if(frontiers.begin(), frontiers.end(),
-                [this](const Frontier &f){ return f.size >= min_frontier_size_; });
+            size_t too_small = 0, blk = 0, claimed = 0;
+            double max_size = 0.0;
+            for (const auto &f : frontiers) {
+                max_size = std::max(max_size, f.size);
+                if (f.size < min_frontier_size_) { ++too_small; continue; }
+                if (is_blacklisted(f.centroid_x, f.centroid_y)) { ++blk; continue; }
+                if (is_peer_claimed(f.centroid_x, f.centroid_y)) { ++claimed; }
+            }
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-                "No reachable frontier (total=%zu valid=%ld blacklisted=%zu)",
-                frontiers.size(), valid_count, blacklist_.size());
+                "No selectable frontier (total=%zu too_small=%zu(max_size=%.2fm, min=%.2fm) "
+                "blacklisted=%zu peer_claimed=%zu, blacklist_entries=%zu)",
+                frontiers.size(), too_small, max_size, min_frontier_size_,
+                blk, claimed, blacklist_.size());
             return;
         }
 

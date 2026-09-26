@@ -137,6 +137,7 @@ target_include_directories(sensor_mb_explore_node PRIVATE
 )
 target_link_libraries(sensor_mb_explore_node
   ${PCL_LIBRARIES}
+  voronoi_lib
 )
 
 add_executable(frontier_explore_node src/frontier_explore_node.cpp)

@@ -68,9 +68,9 @@ struct PartitionFields {
 // territory it had already covered. When `previous` is non-null and
 // `hysteresis_margin_m > 0`, a cell's previous owner (looked up in
 // `previous` by world coordinates, so this still works across recomputes
-// where the map's bounding box has grown/shifted) gets a discount of that
-// many metres on its distance, so a challenger must be closer by more than
-// the margin before territory actually changes hands. Pass
+// where the map's bounding box has grown/shifted) retains ownership unless a
+// challenger is closer by more than the margin. The published distance fields
+// remain raw geodesic distances; only ownership uses the deadband. Pass
 // previous=nullptr (the default) to get the original stateless behaviour.
 PartitionFields compute_partition(
     const nav_msgs::msg::OccupancyGrid& map,
@@ -82,7 +82,7 @@ PartitionFields compute_partition(
 // Looks up the owning robot index recorded in `fields` at world position
 // (wx, wy). Returns -1 if that position falls outside fields' spatial
 // coverage or has no recorded owner there. Used to implement the
-// hysteresis bias in compute_partition() above.
+// hysteresis ownership decision in compute_partition() above.
 int8_t owner_at(const PartitionFields& fields, double wx, double wy);
 
 // Builds robot `robot_index`'s publishable territory mask from `fields`.
@@ -99,9 +99,8 @@ nav_msgs::msg::OccupancyGrid build_mask(
 
 // Consumer-side helper: true if (wx, wy) falls inside this robot's own
 // territory according to `mask` (cell value 50 or 100). Cells outside the
-// mask's spatial coverage are treated as unconstrained (true) — the mask
-// only ever covers currently-known map area, and a candidate just beyond
-// its edge should not be blocked purely because the mask hasn't caught up.
+// mask's spatial coverage are rejected (false) so a stale or smaller mask
+// cannot accidentally authorize a goal outside the assigned territory.
 bool in_own_territory(const nav_msgs::msg::OccupancyGrid& mask,
                       double wx, double wy);
 
