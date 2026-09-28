@@ -783,19 +783,24 @@ private:
             frontiers, robot_x, robot_y, robot_yaw);
 
         if (!best) {
-            size_t too_small = 0, blk = 0, claimed = 0;
+            size_t too_small = 0, blk = 0, claimed = 0, out_of_territory = 0;
             double max_size = 0.0;
             for (const auto &f : frontiers) {
                 max_size = std::max(max_size, f.size);
                 if (f.size < min_frontier_size_) { ++too_small; continue; }
                 if (is_blacklisted(f.centroid_x, f.centroid_y)) { ++blk; continue; }
-                if (is_peer_claimed(f.centroid_x, f.centroid_y)) { ++claimed; }
+                if (is_peer_claimed(f.centroid_x, f.centroid_y)) { ++claimed; continue; }
+                if (use_voronoi_ && voronoi_mask_ &&
+                    !voronoi::in_own_territory(*voronoi_mask_, f.centroid_x, f.centroid_y))
+                    ++out_of_territory;
             }
             RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
                 "No selectable frontier (total=%zu too_small=%zu(max_size=%.2fm, min=%.2fm) "
-                "blacklisted=%zu peer_claimed=%zu, blacklist_entries=%zu)",
+                "blacklisted=%zu peer_claimed=%zu out_of_territory=%zu "
+                "(voronoi_mask=%s), blacklist_entries=%zu)",
                 frontiers.size(), too_small, max_size, min_frontier_size_,
-                blk, claimed, blacklist_.size());
+                blk, claimed, out_of_territory, voronoi_mask_ ? "recv" : "none",
+                blacklist_.size());
             return;
         }
 

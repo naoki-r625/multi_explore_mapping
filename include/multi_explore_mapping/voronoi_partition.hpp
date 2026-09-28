@@ -52,6 +52,21 @@ struct PartitionFields {
     std::vector<float>  dist_owner;    // [m] geodesic distance to owner
     std::vector<float>  dist_second;   // [m] geodesic distance to
                                        // second_owner (+inf if none reached)
+
+    // Only meaningful where owner[i] < 0 (no robot's Dijkstra reached this
+    // cell). Distinguishes two very different reasons for that:
+    //   true  -> the input map itself is unknown (-1) here. The merged map
+    //            just hasn't caught up with this robot's own live SLAM/scan
+    //            yet (typical right at the current exploration frontier);
+    //            this resolves itself within a recompute cycle or two.
+    //   false -> the map already shows this cell as known free space, but
+    //            Dijkstra still couldn't reach it from any robot's current
+    //            position (a structurally disconnected pocket -- e.g. on
+    //            the far side of a wall/obstacle that blocks the only known
+    //            path there). This is not a timing artifact and should be
+    //            treated like it belongs to nobody, the same as another
+    //            robot's confirmed territory.
+    std::vector<uint8_t> unreached_is_unknown;
 };
 
 // Runs one Dijkstra per robot and combines the resulting distance fields.

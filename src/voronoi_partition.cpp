@@ -124,6 +124,7 @@ PartitionFields compute_partition(
     out.second_owner.assign(N, -1);
     out.dist_owner.assign(N, std::numeric_limits<float>::infinity());
     out.dist_second.assign(N, std::numeric_limits<float>::infinity());
+    out.unreached_is_unknown.assign(N, 0);
 
     if (out.width <= 0 || out.height <= 0 || robots.empty() || out.resolution <= 0.0)
         return out;
@@ -182,8 +183,14 @@ PartitionFields compute_partition(
             }
         }
 
-        if (chosen < 0 || !std::isfinite(distance_fields[static_cast<size_t>(chosen)][i]))
+        if (chosen < 0 || !std::isfinite(distance_fields[static_cast<size_t>(chosen)][i])) {
+            // 誰にも届かなかったセル。地図上でまだ未観測(-1)なら、統合地図が
+            // このロボット自身の探査最前線にまだ追いついていないだけの一時的な
+            // ラグ。地図上は既知の自由空間なのに届かないなら、本当に(壁などで)
+            // 分断された領域。build_mask() 側でこの区別に応じて扱いを変える。
+            out.unreached_is_unknown[i] = (map.data[i] == -1) ? 1 : 0;
             continue;
+        }
 
         out.owner[i] = chosen;
         out.dist_owner[i] = distance_fields[static_cast<size_t>(chosen)][i];
@@ -218,7 +225,12 @@ nav_msgs::msg::OccupancyGrid build_mask(
     for (size_t i = 0; i < N; ++i) {
         const int8_t own = fields.owner[i];
         if (own < 0) {
-            grid.data[i] = -1;  // unassigned: no robot has reached this cell yet
+            // 未観測のラグなら-1(in_own_territory側で無制約=許可扱い)。
+            // 既知の自由空間なのに分断されている場合は、誰の領域でもない
+            // 確定領域(0)と同じ扱いにして、壁の向こう側のような孤立した
+            // 未割当エリアのフロンティアが選ばれないようにする。
+            grid.data[i] = (i < fields.unreached_is_unknown.size() &&
+                            fields.unreached_is_unknown[i]) ? -1 : 0;
             continue;
         }
 
@@ -242,19 +254,22 @@ nav_msgs::msg::OccupancyGrid build_mask(
 
 bool in_own_territory(const nav_msgs::msg::OccupancyGrid& mask, double wx, double wy) {
     const auto& info = mask.info;
-    if (info.width == 0 || info.height == 0 || info.resolution <= 0.0f) return false;
+    if (info.width == 0 || info.height == 0 || info.resolution <= 0.0f) return true;
 
     const int gx = static_cast<int>(std::floor((wx - info.origin.position.x) / info.resolution));
     const int gy = static_cast<int>(std::floor((wy - info.origin.position.y) / info.resolution));
     if (gx < 0 || gx >= static_cast<int>(info.width) ||
         gy < 0 || gy >= static_cast<int>(info.height))
-        return false;  // unknown coverage is not permission to leave the territory
+        return true;  // mask hasn't caught up with this area yet: unconstrained
 
     const size_t idx = static_cast<size_t>(gy) * info.width + static_cast<size_t>(gx);
-    if (idx >= mask.data.size()) return false;
+    if (idx >= mask.data.size()) return true;
 
+    // 0 = 相手ロボットの確定領域、または地図上は既知なのに分断されている
+    // 未割当領域(build_mask()参照)。それ以外(-1=未観測ラグ、50/100=自分の
+    // 領域)は選択可とする。
     const int8_t v = mask.data[idx];
-    return v == 50 || v == 100;
+    return v != 0;
 }
 
 }  // namespace voronoi

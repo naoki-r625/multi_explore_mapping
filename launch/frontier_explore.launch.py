@@ -90,7 +90,7 @@ def generate_launch_description():
         'global_frame':      'map',
         'planner_frequency': 2.0,
         'progress_timeout':  90.0,
-        'min_frontier_size': 0.3,
+        'min_frontier_size': 0.5,
         'potential_scale':   0.5,
         'gain_scale':        3.0,
         'backward_penalty_scale': 1.0,
