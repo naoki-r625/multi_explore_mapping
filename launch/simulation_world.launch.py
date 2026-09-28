@@ -170,10 +170,9 @@ def launch_setup(context, *args, **kwargs):
     elif world_type == 'rmf':
         world_path, poses = _setup_rmf_world(context, pkg_my_mapping, logs)
     else:  # 'aws'
-        world_path = os.path.join(
-            get_package_share_directory('aws_robomaker_small_warehouse_world'),
-            'worlds', 'no_roof_small_warehouse', 'no_roof_small_warehouse.world'
-        )
+        # 元の no_roof_small_warehouse から PalletJackB / TrashCanC を除いたもの
+        # (burgerのLiDAR高さで衝突しうるため)。元のワールドは aws パッケージ側に残っている。
+        world_path = os.path.join(pkg_my_mapping, 'worlds', 'no_roof_small_warehouse_clear.world')
 
     if poses is None:
         poses = DEFAULT_ROBOT_POSES[:num_robots]

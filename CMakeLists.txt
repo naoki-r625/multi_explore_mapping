@@ -213,6 +213,7 @@ install(DIRECTORY
 install(PROGRAMS
   scripts/rmf_world_tools.py
   scripts/explore_mode_monitor.py
+  scripts/make_ground_truth_map.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
