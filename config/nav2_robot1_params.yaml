@@ -191,7 +191,7 @@ robot_1/global_costmap/global_costmap:
       enabled: True
       observation_sources: scan
       scan:
-        topic: /robot_1/scan_filtered
+        topic: /robot_1/scan
         max_obstacle_height: 2.0
         clearing: True
         marking: True

@@ -112,7 +112,7 @@ def generate_launch_description():
         'map_topic':              '/map',   # icp_map_matching_node が配信する統合地図
         # icp_map_matching_node の overlap_filter_margin の既定値(2.0m)と揃えて
         # いる。担当領域の境界に、常にICP対応点が取れるだけの重複帯を残すため。
-        'buffer_width_m':          2.0,
+        'buffer_width_m':          1.0,
         'recompute_period_sec':    5.0,
         'downsample_factor':         2,
         'obstacle_threshold':       50,
