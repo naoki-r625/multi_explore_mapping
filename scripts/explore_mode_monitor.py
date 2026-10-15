@@ -12,9 +12,18 @@ sensor_explore_node を停止して Nav2 + frontier_explore_node を起動する
 """
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from nav_msgs.msg import OccupancyGrid
+from std_msgs.msg import String
 from collections import deque
+
+# Latched QoS: late subscribers (e.g. rosbag recording started mid-run) still
+# receive the last published value immediately.
+_LATCHED_QOS = QoSProfile(
+    depth=1,
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.TRANSIENT_LOCAL,
+)
 
 SWITCH_MARKER = 'EXPLORE_MODE_SWITCH robot={}'
 
@@ -42,6 +51,14 @@ class ExploreModeMonitor(Node):
         self._low_streak = {r: 0 for r in self.robots}
         self._switched = {r: False for r in self.robots}
         self._start_time = self._now()
+
+        # /{robot}/explore_mode: "sensor" → "frontier" (latched, rosbag-recordable)
+        self._mode_pubs = {}
+        for r in self.robots:
+            pub = self.create_publisher(String, f'/{r}/explore_mode', _LATCHED_QOS)
+            self._mode_pubs[r] = pub
+            msg = String(); msg.data = 'sensor'
+            pub.publish(msg)
 
         for r in self.robots:
             self.create_subscription(
@@ -102,6 +119,8 @@ class ExploreModeMonitor(Node):
                 self.get_logger().warn(
                     f'{r}: area growth below threshold -> switching to frontier mode'
                 )
+                msg = String(); msg.data = 'frontier'
+                self._mode_pubs[r].publish(msg)
                 print(SWITCH_MARKER.format(r), flush=True)
 
 

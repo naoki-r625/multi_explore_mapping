@@ -55,7 +55,7 @@ FRONTIER_PARAMS = {
 
 MONITOR_PARAMS = {
     'use_sim_time':       True,
-    'window_sec':         60.0,
+    'window_sec':         10.0,
     'check_period_sec':    5.0,
     'min_increase_cells': 300.0,  # 環境・地図解像度に応じて要調整
     'warmup_sec':         30.0,
