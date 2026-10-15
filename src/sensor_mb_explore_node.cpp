@@ -51,6 +51,8 @@ public:
         declare_parameter("frontier_ttl",  300.0);
         declare_parameter("front_cone_deg", 30.0);
         declare_parameter("min_gap_width",   0.4);
+        declare_parameter("gap_run_width_deg",   5.0);
+        declare_parameter("gap_run_tolerance_m", 0.05);
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
@@ -67,6 +69,8 @@ public:
         frontier_ttl_ = get_parameter("frontier_ttl").as_double();
         fcone_        = get_parameter("front_cone_deg").as_double();
         min_gap_w_    = get_parameter("min_gap_width").as_double();
+        gap_run_w_deg_  = get_parameter("gap_run_width_deg").as_double();
+        gap_run_tol_m_  = get_parameter("gap_run_tolerance_m").as_double();
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();
         use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
@@ -141,6 +145,7 @@ public:
 private:
     double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
     double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
+    double gap_run_w_deg_, gap_run_tol_m_;
     std::string odom_frame_;
     bool use_voronoi_;
     nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
@@ -367,7 +372,7 @@ private:
 
         const auto ps = sensor_proc::process(
             latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_,
-            robot_r_, fcone_, min_gap_w_);
+            robot_r_, fcone_, min_gap_w_, gap_run_w_deg_, gap_run_tol_m_);
 
         // Convert gap targets (robot-frame polar + width) to world frontiers
         if (has_odom_) {

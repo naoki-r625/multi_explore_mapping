@@ -62,6 +62,15 @@ struct ProcessedScan {
  *                       Default 30° catches walls at up to ±30° off-forward.
  *                       The original 10° (due to integer truncation of the intended 15°)
  *                       was too narrow for diagonal wall approaches.
+ * @param gap_run_width_deg    Each side of a candidate gap boundary must be backed by a
+ *                             run of consistent beams spanning at least this many degrees
+ *                             (converted to a beam count via the scan's angle_increment)
+ *                             before the gap is accepted. Rejects gaps caused by a single
+ *                             noisy beam rather than a real hit/miss or depth-change edge.
+ * @param gap_run_tolerance_m  Within a run, a hit beam's range may deviate from the
+ *                             boundary beam's range by at most this much [m] and still
+ *                             count as "the same surface". A miss beam's run only checks
+ *                             that every beam in it is also a miss (no distance to compare).
  */
 ProcessedScan process(
     const sensor_msgs::msg::LaserScan& scan,
@@ -70,8 +79,10 @@ ProcessedScan process(
     double valley_min_deg,
     double emergency_dist,
     double angular_speed,
-    double robot_radius   = 0.0,
-    double front_cone_deg = 30.0,
-    double min_gap_width  = 0.4);
+    double robot_radius        = 0.0,
+    double front_cone_deg      = 30.0,
+    double min_gap_width       = 0.4,
+    double gap_run_width_deg   = 5.0,
+    double gap_run_tolerance_m = 0.05);
 
 } // namespace sensor_proc

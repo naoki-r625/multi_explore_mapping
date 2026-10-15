@@ -24,16 +24,51 @@ namespace sensor_proc {
 // For miss beams, a virtual range is estimated as min(rmax*0.7, r_hit*2.0)
 // to represent the near edge of the unknown space.
 
+// A single noisy beam can make two adjacent beams look like a gap boundary
+// even where the surface is actually continuous. Before accepting a
+// candidate boundary, require that `count` consecutive beams on one side
+// (starting at `start`, stepping by `step` = +1 or -1) all agree with the
+// boundary beam's own classification: same hit/miss state, and — for a hit
+// — within `tolerance_m` of the same range. Indices wrap around the array
+// since a 360° LiDAR scan is physically circular (matches the wrap-around
+// indexing already used by VFH::build_histogram()).
+static bool run_is_consistent(
+    const sensor_msgs::msg::LaserScan& scan,
+    int start, int step, int count,
+    bool boundary_is_hit, float boundary_range, float rmax, float tolerance_m)
+{
+    const int n = static_cast<int>(scan.ranges.size());
+    if (n == 0) return false;
+    int idx = start;
+    for (int k = 0; k < count; ++k) {
+        const int wi = ((idx % n) + n) % n;
+        const float r = scan.ranges[wi];
+        const bool hit = std::isfinite(r) && r >= scan.range_min && r < rmax * 0.97f;
+        if (hit != boundary_is_hit) return false;
+        if (boundary_is_hit && std::abs(r - boundary_range) > tolerance_m) return false;
+        idx += step;
+    }
+    return true;
+}
+
 static std::vector<sensor_proc::ProcessedScan::GapTarget> detect_gaps(
     const sensor_msgs::msg::LaserScan& scan,
     double safe_distance,
-    double min_gap_width)
+    double min_gap_width,
+    double gap_run_width_deg,
+    double gap_run_tolerance_m)
 {
     using GapTarget = sensor_proc::ProcessedScan::GapTarget;
     std::vector<GapTarget> targets;
     const auto& r  = scan.ranges;
     const float rmax   = scan.range_max;
     const float safe_f = static_cast<float>(safe_distance);
+    const float tol_f  = static_cast<float>(gap_run_tolerance_m);
+
+    // Convert the required angular run width to a beam count. angle_increment
+    // is assumed uniform across the scan (true for all LiDARs this package targets).
+    const int run_n = std::max(1, static_cast<int>(std::lround(
+        (gap_run_width_deg * M_PI / 180.0) / scan.angle_increment)));
 
     for (size_t i = 0; i + 1 < r.size(); ++i) {
         const float ri  = r[i];
@@ -45,6 +80,13 @@ static std::vector<sensor_proc::ProcessedScan::GapTarget> detect_gaps(
         if (!is_gap && h1 && h2)
             is_gap = (std::abs(ri - ri1) > safe_f * 1.5f);
         if (!is_gap) continue;
+
+        // Both sides of the boundary must themselves be stable runs, not a
+        // single noisy beam masquerading as a gap edge.
+        if (!run_is_consistent(scan, static_cast<int>(i), -1, run_n, h1, ri, rmax, tol_f))
+            continue;
+        if (!run_is_consistent(scan, static_cast<int>(i + 1), +1, run_n, h2, ri1, rmax, tol_f))
+            continue;
 
         // Beam angles
         const double a_i  = scan.angle_min + static_cast<double>(i)     * scan.angle_increment;
@@ -94,7 +136,9 @@ ProcessedScan process(
     double angular_speed,
     double robot_radius,
     double front_cone_deg,
-    double min_gap_width)
+    double min_gap_width,
+    double gap_run_width_deg,
+    double gap_run_tolerance_m)
 {
     ProcessedScan ps;
 
@@ -133,7 +177,8 @@ ProcessedScan process(
     }
 
     // Step 3: Gap frontier detection from raw scan.
-    ps.gap_targets = detect_gaps(scan, safe_distance, min_gap_width);
+    ps.gap_targets = detect_gaps(scan, safe_distance, min_gap_width,
+                                  gap_run_width_deg, gap_run_tolerance_m);
 
     return ps;
 }
