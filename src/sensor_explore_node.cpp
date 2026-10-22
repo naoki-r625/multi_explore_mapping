@@ -56,6 +56,9 @@ public:
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
+        declare_parameter("filter_explored_frontiers", true);
+        declare_parameter("merged_map_topic", std::string("/map"));
+        declare_parameter("explored_obstacle_threshold", 50);
 
         lin_          = get_parameter("linear_speed").as_double();
         ang_          = get_parameter("angular_speed").as_double();
@@ -74,6 +77,10 @@ public:
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();
         use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
+        filter_explored_   = get_parameter("filter_explored_frontiers").as_bool();
+        merged_map_topic_  = get_parameter("merged_map_topic").as_string();
+        explored_obstacle_threshold_ =
+            static_cast<int8_t>(get_parameter("explored_obstacle_threshold").as_int());
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
@@ -120,6 +127,16 @@ public:
                 [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { voronoi_mask_ = m; });
         }
 
+        // 統合マップ（icp_map_matching_node が配信）。既に探査済み（自分 or 相手）の
+        // 自由空間に落ちたフラッグを弾くために参照する。絶対トピック名なので
+        // 名前空間に関係なく共有の /map を購読する。
+        if (filter_explored_) {
+            merged_map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
+                merged_map_topic_,
+                rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable(),
+                [this](nav_msgs::msg::OccupancyGrid::SharedPtr m) { merged_map_ = m; });
+        }
+
         timer_ = create_wall_timer(
             std::chrono::milliseconds(100),
             [this]() { control_loop(); });
@@ -149,6 +166,10 @@ private:
     std::string odom_frame_;
     bool use_voronoi_;
     nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
+    bool filter_explored_;
+    std::string merged_map_topic_;
+    int8_t explored_obstacle_threshold_;
+    nav_msgs::msg::OccupancyGrid::SharedPtr merged_map_;
     std::string global_frame_;
     std::string robot_base_frame_;
     tf2_ros::Buffer tf_buffer_;
@@ -193,6 +214,7 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr    frontier_peer_sub_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  target_sub_;
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     voronoi_mask_sub_;
+    rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     merged_map_sub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr           cmd_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr       frontier_pub_;
@@ -264,8 +286,29 @@ private:
         return false;
     }
 
+    // 統合マップ上で、この位置が既に探査済みの自由空間かどうか。
+    // 範囲外・未観測(-1)・障害物は「確認できない」側に倒して false
+    // (=除外しない)とする。統合マップにはICP統合のラグがあるため、
+    // 「まだ反映されていないだけの新規領域」を誤って捨てないための配慮。
+    // 逆に自由空間だと確認できた場合だけ、自分 or 相手が既に見た場所として弾く。
+    bool is_map_explored(double wx, double wy) const {
+        if (!filter_explored_ || !merged_map_) return false;
+        const auto& info = merged_map_->info;
+        if (info.width == 0 || info.height == 0 || info.resolution <= 0.0f) return false;
+        const int gx = static_cast<int>(std::floor((wx - info.origin.position.x) / info.resolution));
+        const int gy = static_cast<int>(std::floor((wy - info.origin.position.y) / info.resolution));
+        if (gx < 0 || gx >= static_cast<int>(info.width) ||
+            gy < 0 || gy >= static_cast<int>(info.height))
+            return false;
+        const size_t idx = static_cast<size_t>(gy) * info.width + static_cast<size_t>(gx);
+        if (idx >= merged_map_->data.size()) return false;
+        const int8_t v = merged_map_->data[idx];
+        return v >= 0 && v < explored_obstacle_threshold_;
+    }
+
     void add_frontier(double wx, double wy, double width = 1.0) {
         if (is_visited(wx, wy)) return;
+        if (is_map_explored(wx, wy)) return;
         for (const auto& f : frontier_store_)
             if (std::hypot(wx - f.x, wy - f.y) < dup_r_ * 0.5) return;
         frontier_store_.push_back({wx, wy, now().seconds(), width});
@@ -283,7 +326,8 @@ private:
         frontier_store_.erase(
             std::remove_if(frontier_store_.begin(), frontier_store_.end(),
                 [&](const Frontier& f) {
-                    return (t_now - f.t > frontier_ttl_) || is_visited(f.x, f.y);
+                    return (t_now - f.t > frontier_ttl_) || is_visited(f.x, f.y) ||
+                           is_map_explored(f.x, f.y);
                 }),
             frontier_store_.end());
     }
