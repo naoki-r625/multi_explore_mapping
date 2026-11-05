@@ -23,6 +23,7 @@
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <nav2_msgs/action/compute_path_to_pose.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <multi_explore_mapping/sensor_processor.hpp>
 #include <multi_explore_mapping/voronoi_partition.hpp>
@@ -33,6 +34,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <map>
 #include <memory>
 #include <string>
@@ -42,6 +44,8 @@ class SensorMbExploreNode : public rclcpp::Node {
 public:
     using NavigateToPose = nav2_msgs::action::NavigateToPose;
     using GoalHandleNav   = rclcpp_action::ClientGoalHandle<NavigateToPose>;
+    using ComputePathToPose = nav2_msgs::action::ComputePathToPose;
+    using GoalHandlePath     = rclcpp_action::ClientGoalHandle<ComputePathToPose>;
 
     SensorMbExploreNode()
     : Node("sensor_mb_explore"),
@@ -71,6 +75,9 @@ public:
         declare_parameter("gap_jump_target_mode",  std::string("between"));
         declare_parameter("gap_jump_ratio",        0.5);
         declare_parameter("gap_corner_offset",     0.35);
+        // 凹コーナー対策(gap_extraction.hpp参照)。既定は無効(inf)。
+        declare_parameter("gap_max_open_depth_diff_m",
+            std::numeric_limits<double>::infinity());
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
@@ -80,6 +87,13 @@ public:
         declare_parameter("progress_timeout",  90.0);
         declare_parameter("blacklist_radius",   1.0);
         declare_parameter("blacklist_clear_sec", 60.0);
+        // 目標選択のコストに使う「距離」を、直線距離ではなくNav2の実パス長
+        // (compute_path_to_pose)で評価するためのキャッシュ設定。候補ごとに
+        // 毎サイクル問い合わせるとplanner_serverの負荷が大きいので、結果を
+        // path_cache_ttl_sec の間キャッシュし、同時問い合わせ数も上限を設ける。
+        declare_parameter("path_cost_scale",      0.25);
+        declare_parameter("path_cache_ttl_sec",    5.0);
+        declare_parameter("max_path_queries_per_cycle", 6);
 
         ang_          = get_parameter("angular_speed").as_double();
         safe_         = get_parameter("safe_distance").as_double();
@@ -107,6 +121,8 @@ public:
                 : gap_extraction::Params::JumpTargetMode::kBetween;
         gap_params_.jump_ratio         = get_parameter("gap_jump_ratio").as_double();
         gap_params_.corner_offset      = get_parameter("gap_corner_offset").as_double();
+        gap_params_.max_open_depth_diff_m =
+            get_parameter("gap_max_open_depth_diff_m").as_double();
 
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();
@@ -118,6 +134,10 @@ public:
         progress_timeout_   = get_parameter("progress_timeout").as_double();
         blacklist_radius_   = get_parameter("blacklist_radius").as_double();
         blacklist_clear_sec_ = get_parameter("blacklist_clear_sec").as_double();
+        path_cost_scale_    = get_parameter("path_cost_scale").as_double();
+        path_cache_ttl_sec_ = get_parameter("path_cache_ttl_sec").as_double();
+        max_path_queries_per_cycle_ =
+            static_cast<int>(get_parameter("max_path_queries_per_cycle").as_int());
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
@@ -131,6 +151,9 @@ public:
 
         // Nav2 アクションクライアント（相対名なので名前空間下で <ns>/navigate_to_pose に解決）
         nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
+        // フロンティア選択のコストに使う実パス長の問い合わせ用
+        // （<ns>/compute_path_to_pose、planner_server が提供）
+        path_client_ = rclcpp_action::create_client<ComputePathToPose>(this, "compute_path_to_pose");
 
         // Multi-robot: pose trail (1 Hz)
         pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
@@ -261,6 +284,74 @@ private:
     std::vector<std::pair<double, double>> nav_blacklist_;
 
     rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
+
+    // ------------------------------------------------------------------
+    // 実パス長キャッシュ(目標選択のコストで直線距離の代わりに使う)
+
+    double path_cost_scale_;
+    double path_cache_ttl_sec_;
+    int    max_path_queries_per_cycle_;
+
+    struct PathCacheEntry { double length; rclcpp::Time t; };
+    std::map<std::pair<long, long>, PathCacheEntry> path_cache_;
+    std::set<std::pair<long, long>> path_pending_;
+
+    rclcpp_action::Client<ComputePathToPose>::SharedPtr path_client_;
+
+    // frontier_store_の座標は連続値なので、0.1m格子に丸めてキャッシュキーに
+    // する(わずかな再検出のたびに別候補として再問い合わせしないため)。
+    static std::pair<long, long> path_key(double x, double y) {
+        return {std::lround(x * 10.0), std::lround(y * 10.0)};
+    }
+
+    // 候補(fx,fy)へのロボットからの実パス長を返す。キャッシュが新しければ
+    // それを返す。キャッシュがない/古い場合は非同期で問い合わせを開始しつつ
+    // (多重発行はpath_pending_で防ぐ)、結果が届くまでの間は直線距離を暫定値
+    // として返す。query_budget が尽きたら問い合わせ自体をスキップする
+    // (frontier_store_が大きい時にplanner_serverへ殺到しないための上限)。
+    double path_length_for(double fx, double fy, double robot_x, double robot_y, int& query_budget) {
+        const double straight = std::hypot(fx - robot_x, fy - robot_y);
+        const auto key = path_key(fx, fy);
+        const auto it = path_cache_.find(key);
+        if (it != path_cache_.end() &&
+            (now() - it->second.t).seconds() < path_cache_ttl_sec_) {
+            return it->second.length;
+        }
+        if (query_budget > 0 && path_pending_.find(key) == path_pending_.end() &&
+            path_client_->action_server_is_ready()) {
+            --query_budget;
+            path_pending_.insert(key);
+
+            auto goal = ComputePathToPose::Goal();
+            goal.goal.header.frame_id = global_frame_;
+            goal.goal.header.stamp    = now();
+            goal.goal.pose.position.x = fx;
+            goal.goal.pose.position.y = fy;
+            goal.goal.pose.orientation.w = 1.0;
+            goal.use_start = false;  // 現在のロボット位置を起点にする
+
+            auto opts = rclcpp_action::Client<ComputePathToPose>::SendGoalOptions();
+            opts.goal_response_callback =
+                [this, key](const GoalHandlePath::SharedPtr& gh) {
+                    if (!gh) path_pending_.erase(key);  // rejectされたら次サイクルで再試行
+                };
+            opts.result_callback =
+                [this, key](const GoalHandlePath::WrappedResult& res) {
+                    path_pending_.erase(key);
+                    if (res.code != rclcpp_action::ResultCode::SUCCEEDED) return;
+                    const auto& poses = res.result->path.poses;
+                    double len = 0.0;
+                    for (size_t i = 1; i < poses.size(); ++i) {
+                        len += std::hypot(
+                            poses[i].pose.position.x - poses[i - 1].pose.position.x,
+                            poses[i].pose.position.y - poses[i - 1].pose.position.y);
+                    }
+                    path_cache_[key] = {len, now()};
+                };
+            path_client_->async_send_goal(goal, opts);
+        }
+        return straight;  // 届くまでの暫定値
+    }
 
     // ------------------------------------------------------------------
     // Persistent frontier store
@@ -635,8 +726,9 @@ private:
         }
 
         // ベストなフロンティアを選択
-        // cost = |bearing| + 0.25*dist − 0.3*width + peer_penalty
-        // 前方・近距離・広い開口を優先し、相手ロボットの近くは減点する。
+        // cost = |bearing| + path_cost_scale*実パス長 − 0.3*width + peer_penalty
+        // 前方・近距離(直線でなくNav2の実パス長)・広い開口を優先し、
+        // 相手ロボットの近くは減点する。
         double best_cost = std::numeric_limits<double>::max();
         double best_fx = 0.0, best_fy = 0.0;
         bool   found = false;
@@ -644,6 +736,7 @@ private:
         // Voronoi有効時は自分の担当範囲だけを候補にする。
         // マスク未受信・自領域に候補なしなら次の更新まで待つ。
         const bool respect_territory = use_voronoi_;
+        int query_budget = max_path_queries_per_cycle_;
         for (const auto& f : frontier_store_) {
             if (is_visited(f.x, f.y)) continue;
             if (is_blacklisted(f.x, f.y)) continue;
@@ -653,8 +746,8 @@ private:
             const double dy   = f.y - pose_.y;
             const double raw  = std::atan2(dy, dx) - pose_.yaw;
             const double ang  = std::atan2(std::sin(raw), std::cos(raw));
-            const double dist = std::hypot(dx, dy);
-            double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+            const double dist = path_length_for(f.x, f.y, pose_.x, pose_.y, query_budget);
+            double cost = std::abs(ang) + path_cost_scale_ * dist - 0.3 * f.width;
 
             // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
             const double avoid_r = dup_r_ * 2.0;

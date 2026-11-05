@@ -1,6 +1,7 @@
 #pragma once
 
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <limits>
 #include <vector>
 
 /**
@@ -31,6 +32,15 @@ struct Params {
     JumpTargetMode jump_target_mode = JumpTargetMode::kBetween;
     double jump_ratio = 0.5;         // "between": 0=近い点, 1=遠い点
     double corner_offset = 0.35;     // "corner": 角から遠い側へずらす距離 [m]
+
+    // open判定は「inf区間の両脇の反射点(pA, pB)を結ぶ直線上は障害物なし」を
+    // 前提に、その中点を目標にしている。これは素直な開口(ドア・通路)では
+    // 正しいが、凹んだコーナー(pAとpBが別々の壁面に属し、奥行きが大きく
+    // 異なる)では中点が壁の外側に出ることがある。このパラメータを有限値に
+    // すると、|dist(pA) - dist(pB)| がこれを超えるopenを候補から除外する。
+    // 既定値は無限大(無効)で、golden データでの検証結果(全297ギャップ一致)
+    // に影響しない。問題が再現したときにだけ有効にして様子を見る想定。
+    double max_open_depth_diff_m = std::numeric_limits<double>::infinity();
 };
 
 enum class GapType { kOpen, kJump };

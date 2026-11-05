@@ -63,6 +63,9 @@ public:
         declare_parameter("gap_jump_target_mode",  std::string("between"));
         declare_parameter("gap_jump_ratio",        0.5);
         declare_parameter("gap_corner_offset",     0.35);
+        // 凹コーナー対策(gap_extraction.hpp参照)。既定は無効(inf)。
+        declare_parameter("gap_max_open_depth_diff_m",
+            std::numeric_limits<double>::infinity());
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
@@ -97,6 +100,8 @@ public:
                 : gap_extraction::Params::JumpTargetMode::kBetween;
         gap_params_.jump_ratio         = get_parameter("gap_jump_ratio").as_double();
         gap_params_.corner_offset      = get_parameter("gap_corner_offset").as_double();
+        gap_params_.max_open_depth_diff_m =
+            get_parameter("gap_max_open_depth_diff_m").as_double();
 
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();

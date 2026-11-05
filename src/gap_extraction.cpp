@@ -142,6 +142,12 @@ std::vector<Gap> extract_gaps(const sensor_msgs::msg::LaserScan& scan, const Par
                 const double width = std::hypot(pbx - pax, pby - pay);
                 if (width < params.min_gap_width) break;
 
+                // 両脇の反射点の奥行きが大きく異なる場合、ドア状の開口ではなく
+                // 凹コーナー(別々の壁面がたまたま近い角度に見えているだけ)の
+                // 可能性が高く、中点が壁の外側に出ることがある。既定では
+                // max_open_depth_diff_m = inf なのでこのチェックは効かない。
+                if (std::abs(rr[a - 1] - rr[b + 1]) > params.max_open_depth_diff_m) break;
+
                 if (params.support_open_edges) {
                     if (count_support(idx[a - 1], -1) < params.min_support) break;
                     if (count_support(idx[b + 1], +1) < params.min_support) break;
