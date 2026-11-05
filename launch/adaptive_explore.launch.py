@@ -31,7 +31,9 @@ SENSOR_PARAMS = {
     'robot_radius':         0.13,
     'emergency_dist':        0.22,
     'front_cone_deg':       30.0,
-    'min_gap_width':         0.4,
+    # 分岐点検出(docs/gap_extraction_spec.md)。他はコード側のデフォルト
+    # (golden データで検証済みの値)のままでよい。
+    'gap_min_width':         0.6,
     'dup_radius':            1.5,
     'dup_time':            600.0,
     'frontier_ttl':        300.0,

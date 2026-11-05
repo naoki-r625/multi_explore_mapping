@@ -1,8 +1,13 @@
 /**
- * Sensor-based autonomous exploration node.
+ * Sensor-based exploration node, Nav2-driven (move-base style).
  *
- * Obstacle avoidance : cluster-based VFH via sensor_processor
- * Exploration        : persistent frontier store + multi-robot coordination
+ * Frontier selection : gap detection via sensor_processor (same algorithm as
+ *                       sensor_explore_node) + persistent frontier store +
+ *                       multi-robot coordination.
+ * Movement            : delegated entirely to Nav2 (navigate_to_pose action).
+ *                       This node never publishes cmd_vel itself — local
+ *                       obstacle avoidance is Nav2's controller_server +
+ *                       costmap, same as frontier_explore_node.
  *
  * Multi-robot topics
  *   /shared_exploration_poses  (PoseStamped, 1 Hz): own odometry trail
@@ -12,11 +17,12 @@
  *       position as "virtually visited" so they select a different frontier.
  */
 #include <rclcpp/rclcpp.hpp>
-#include <geometry_msgs/msg/twist.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <nav2_msgs/action/navigate_to_pose.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <multi_explore_mapping/sensor_processor.hpp>
 #include <multi_explore_mapping/voronoi_partition.hpp>
@@ -32,14 +38,16 @@
 #include <string>
 #include <vector>
 
-class SensorExploreNode : public rclcpp::Node {
+class SensorMbExploreNode : public rclcpp::Node {
 public:
-    SensorExploreNode()
-    : Node("sensor_explore"),
+    using NavigateToPose = nav2_msgs::action::NavigateToPose;
+    using GoalHandleNav   = rclcpp_action::ClientGoalHandle<NavigateToPose>;
+
+    SensorMbExploreNode()
+    : Node("sensor_mb_explore"),
       tf_buffer_(this->get_clock()),
       tf_listener_(tf_buffer_)
     {
-        declare_parameter("linear_speed",    0.2);
         declare_parameter("angular_speed",   0.6);
         declare_parameter("safe_distance",   0.5);
         declare_parameter("vfh_threshold",   1.5);
@@ -50,17 +58,29 @@ public:
         declare_parameter("dup_time",      600.0);   // match 10-min history window
         declare_parameter("frontier_ttl",  300.0);
         declare_parameter("front_cone_deg", 30.0);
-        declare_parameter("min_gap_width",   0.4);
-        declare_parameter("gap_run_width_deg",   5.0);
-        declare_parameter("gap_run_tolerance_m", 0.05);
+        // ギャップ抽出(docs/gap_extraction_spec.md, gap_extraction.hpp)
+        declare_parameter("gap_median_win",        3);
+        declare_parameter("gap_min_open_samples",  3);
+        declare_parameter("gap_min_width",         0.6);
+        declare_parameter("gap_target_push",       0.5);
+        declare_parameter("gap_abd_lambda_deg",   10.0);
+        declare_parameter("gap_abd_sigma",         0.01);
+        declare_parameter("gap_min_jump",          0.5);
+        declare_parameter("gap_min_support",       3);
+        declare_parameter("gap_support_open_edges", false);
+        declare_parameter("gap_jump_target_mode",  std::string("between"));
+        declare_parameter("gap_jump_ratio",        0.5);
+        declare_parameter("gap_corner_offset",     0.35);
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
         declare_parameter("filter_explored_frontiers", true);
         declare_parameter("merged_map_topic", std::string("/map"));
         declare_parameter("explored_obstacle_threshold", 50);
+        declare_parameter("progress_timeout",  90.0);
+        declare_parameter("blacklist_radius",   1.0);
+        declare_parameter("blacklist_clear_sec", 60.0);
 
-        lin_          = get_parameter("linear_speed").as_double();
         ang_          = get_parameter("angular_speed").as_double();
         safe_         = get_parameter("safe_distance").as_double();
         vfh_t_        = get_parameter("vfh_threshold").as_double();
@@ -71,9 +91,23 @@ public:
         dup_t_        = get_parameter("dup_time").as_double();
         frontier_ttl_ = get_parameter("frontier_ttl").as_double();
         fcone_        = get_parameter("front_cone_deg").as_double();
-        min_gap_w_    = get_parameter("min_gap_width").as_double();
-        gap_run_w_deg_  = get_parameter("gap_run_width_deg").as_double();
-        gap_run_tol_m_  = get_parameter("gap_run_tolerance_m").as_double();
+
+        gap_params_.median_win         = static_cast<int>(get_parameter("gap_median_win").as_int());
+        gap_params_.min_open_samples   = static_cast<int>(get_parameter("gap_min_open_samples").as_int());
+        gap_params_.min_gap_width      = get_parameter("gap_min_width").as_double();
+        gap_params_.target_push        = get_parameter("gap_target_push").as_double();
+        gap_params_.abd_lambda_deg     = get_parameter("gap_abd_lambda_deg").as_double();
+        gap_params_.abd_sigma          = get_parameter("gap_abd_sigma").as_double();
+        gap_params_.min_jump           = get_parameter("gap_min_jump").as_double();
+        gap_params_.min_support        = static_cast<int>(get_parameter("gap_min_support").as_int());
+        gap_params_.support_open_edges = get_parameter("gap_support_open_edges").as_bool();
+        gap_params_.jump_target_mode   =
+            (get_parameter("gap_jump_target_mode").as_string() == "corner")
+                ? gap_extraction::Params::JumpTargetMode::kCorner
+                : gap_extraction::Params::JumpTargetMode::kBetween;
+        gap_params_.jump_ratio         = get_parameter("gap_jump_ratio").as_double();
+        gap_params_.corner_offset      = get_parameter("gap_corner_offset").as_double();
+
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();
         use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
@@ -81,6 +115,9 @@ public:
         merged_map_topic_  = get_parameter("merged_map_topic").as_string();
         explored_obstacle_threshold_ =
             static_cast<int8_t>(get_parameter("explored_obstacle_threshold").as_int());
+        progress_timeout_   = get_parameter("progress_timeout").as_double();
+        blacklist_radius_   = get_parameter("blacklist_radius").as_double();
+        blacklist_clear_sec_ = get_parameter("blacklist_clear_sec").as_double();
 
         scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
             "scan", rclcpp::SensorDataQoS(),
@@ -88,11 +125,12 @@ public:
                 latest_scan_ = *m; has_scan_ = true;
             });
 
-        cmd_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
-
         ns_ = get_namespace();
         robot_base_frame_ =
             (!ns_.empty() && ns_.front() == '/' ? ns_.substr(1) : ns_) + "/base_footprint";
+
+        // Nav2 アクションクライアント（相対名なので名前空間下で <ns>/navigate_to_pose に解決）
+        nav_client_ = rclcpp_action::create_client<NavigateToPose>(this, "navigate_to_pose");
 
         // Multi-robot: pose trail (1 Hz)
         pose_pub_ = create_publisher<geometry_msgs::msg::PoseStamped>(
@@ -138,7 +176,7 @@ public:
         }
 
         timer_ = create_wall_timer(
-            std::chrono::milliseconds(100),
+            std::chrono::milliseconds(200),
             [this]() { control_loop(); });
 
         share_timer_ = create_wall_timer(
@@ -153,16 +191,17 @@ public:
             std::chrono::milliseconds(500),
             [this]() { publish_markers(); });
 
+        last_blacklist_clear_ = this->now();
+
         RCLCPP_INFO(get_logger(),
-            "sensor_explore: safe=%.2f r=%.3f emerg=%.2f "
-            "dup_r=%.1f dup_t=%.0f gap_w=%.2f ns=%s",
-            safe_, robot_r_, emerg_, dup_r_, dup_t_, min_gap_w_, ns_.c_str());
+            "sensor_mb_explore: safe=%.2f r=%.3f gap_w=%.2f progress_timeout=%.0f ns=%s",
+            safe_, robot_r_, gap_params_.min_gap_width, progress_timeout_, ns_.c_str());
     }
 
 private:
-    double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
-    double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
-    double gap_run_w_deg_, gap_run_tol_m_;
+    double ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
+    double dup_r_, dup_t_, frontier_ttl_, fcone_;
+    gap_extraction::Params gap_params_;
     std::string odom_frame_;
     bool use_voronoi_;
     nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
@@ -197,6 +236,33 @@ private:
     bool   has_target_{false};
 
     // ------------------------------------------------------------------
+    // Nav2 goal lifecycle (ported from frontier_explore_node.cpp)
+
+    enum class State { IDLE, MOVING };
+    State state_ = State::IDLE;
+
+    // 同じ(ように見える)ゴールがNav2に連続でrejectされた場合、進捗タイムアウト
+    // (MOVING状態でしか働かない)には引っかからずMOVING↔IDLEを高速に往復して
+    // しまう。N回連続rejectでブラックリストして抜け出す。
+    static constexpr int kMaxGoalRejects = 3;
+
+    double progress_timeout_;
+    double blacklist_radius_;
+    double blacklist_clear_sec_;
+
+    rclcpp::Time last_progress_time_;
+    rclcpp::Time last_blacklist_clear_;
+    geometry_msgs::msg::PoseStamped current_goal_;
+    uint64_t current_goal_seq_ = 0;  // cancel後の古いcallbackを無視するためのシーケンス番号
+    int reject_goal_streak_ = 0;     // Nav2に連続でacceptされなかった回数
+
+    // 到達失敗したフロンティアのブラックリスト(Nav2のreject/abort用。
+    // frontier_store_の重複排除とは別の、ナビゲーション失敗の記憶)
+    std::vector<std::pair<double, double>> nav_blacklist_;
+
+    rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
+
+    // ------------------------------------------------------------------
     // Persistent frontier store
 
     struct Frontier {
@@ -215,7 +281,6 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr  target_sub_;
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     voronoi_mask_sub_;
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr     merged_map_sub_;
-    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr           cmd_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     pose_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr       frontier_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr     target_pub_;
@@ -314,6 +379,12 @@ private:
         frontier_store_.push_back({wx, wy, now().seconds(), width});
     }
 
+    bool is_blacklisted(double cx, double cy) const {
+        for (const auto& [bx, by] : nav_blacklist_)
+            if (std::hypot(cx - bx, cy - by) < blacklist_radius_) return true;
+        return false;
+    }
+
     // respect_territory=true のときのみボロノイセル外を弾く。マスク未受信、
     // または use_voronoi_=false のときは常に true（制約なし）を返す。
     bool in_own_territory(double wx, double wy, bool respect_territory) const {
@@ -383,6 +454,11 @@ private:
 
     // ------------------------------------------------------------------
     // Multi-robot: navigation target claim (5 Hz)
+    //
+    // has_target_/target_x_/target_y_ double as both "what we last told
+    // peers we're going for" (published here) and "what Nav2 goal is
+    // currently active" (set/cleared in send_nav_goal()/cancel_current_goal()
+    // and the goal_response_callback/result_callback below).
 
     void publish_target() {
         if (!has_target_) return;
@@ -402,7 +478,104 @@ private:
     }
 
     // ------------------------------------------------------------------
-    // Control loop (10 Hz)
+    // Nav2 goal send / cancel (ported from frontier_explore_node.cpp)
+
+    void send_nav_goal(double x, double y) {
+        if (!nav_client_->action_server_is_ready()) {
+            RCLCPP_WARN(get_logger(), "navigate_to_pose action server not available");
+            return;
+        }
+
+        auto goal_msg = NavigateToPose::Goal();
+        goal_msg.pose.header.frame_id = global_frame_;
+        goal_msg.pose.header.stamp    = now();
+        goal_msg.pose.pose.position.x = x;
+        goal_msg.pose.pose.position.y = y;
+        goal_msg.pose.pose.orientation.w = 1.0;
+        current_goal_ = goal_msg.pose;
+
+        // シーケンス番号をインクリメント: 古いゴールのcallbackを無視するため
+        const uint64_t seq = ++current_goal_seq_;
+
+        auto opts = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
+
+        opts.goal_response_callback =
+            [this, seq](const GoalHandleNav::SharedPtr& gh) {
+                if (seq != current_goal_seq_) return;  // 古いゴールのcallbackを無視
+                if (!gh) {
+                    ++reject_goal_streak_;
+                    RCLCPP_WARN(get_logger(),
+                        "Goal rejected by Nav2 (%d/%d) at (%.2f, %.2f)",
+                        reject_goal_streak_, kMaxGoalRejects,
+                        current_goal_.pose.position.x, current_goal_.pose.position.y);
+                    // rejectはaction acceptレベルの即時拒否なのでMOVING状態を経由せず、
+                    // progress_timeoutの監視対象にならない。放置すると同じ目標を
+                    // 毎ループ再送し続けて全く動かなくなるため、ここで自前に
+                    // ブラックリスト行きにして次のフロンティアへ逃がす。
+                    if (reject_goal_streak_ >= kMaxGoalRejects) {
+                        RCLCPP_WARN(get_logger(),
+                            "Repeated rejection -> blacklisting (%.2f, %.2f)",
+                            current_goal_.pose.position.x, current_goal_.pose.position.y);
+                        nav_blacklist_.emplace_back(current_goal_.pose.position.x,
+                                                    current_goal_.pose.position.y);
+                        reject_goal_streak_ = 0;
+                    }
+                    state_ = State::IDLE;
+                    has_target_ = false;
+                } else {
+                    reject_goal_streak_ = 0;
+                    RCLCPP_INFO(get_logger(), "Goal accepted by Nav2");
+                }
+            };
+
+        opts.result_callback =
+            [this, seq](const GoalHandleNav::WrappedResult& res) {
+                if (seq != current_goal_seq_) return;  // cancel後の古いcallbackを無視
+                switch (res.code) {
+                    case rclcpp_action::ResultCode::SUCCEEDED:
+                        RCLCPP_INFO(get_logger(), "Reached target frontier!");
+                        break;
+                    case rclcpp_action::ResultCode::ABORTED:
+                        RCLCPP_WARN(get_logger(),
+                            "Navigation aborted -> blacklisting (%.2f, %.2f)",
+                            current_goal_.pose.position.x,
+                            current_goal_.pose.position.y);
+                        nav_blacklist_.emplace_back(current_goal_.pose.position.x,
+                                                    current_goal_.pose.position.y);
+                        break;
+                    case rclcpp_action::ResultCode::CANCELED:
+                        RCLCPP_INFO(get_logger(), "Navigation canceled");
+                        break;
+                    default:
+                        break;
+                }
+                state_ = State::IDLE;
+                has_target_ = false;
+            };
+
+        nav_client_->async_send_goal(goal_msg, opts);
+        state_ = State::MOVING;
+        last_progress_time_ = now();
+        target_x_ = x; target_y_ = y; has_target_ = true;
+
+        RCLCPP_INFO(get_logger(), "Navigating to frontier (%.2f, %.2f)", x, y);
+    }
+
+    void cancel_current_goal() {
+        if (state_ == State::MOVING) {
+            nav_client_->async_cancel_all_goals();
+            state_ = State::IDLE;
+            has_target_ = false;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Control loop (5 Hz)
+    //
+    // Only decides WHERE to go (gap-based frontier selection, same as
+    // sensor_explore_node) and hands that off to Nav2 via send_nav_goal().
+    // It never publishes cmd_vel: local obstacle avoidance is entirely
+    // Nav2's controller_server + costmap, same as frontier_explore_node.
 
     void control_loop() {
         if (!has_scan_) {
@@ -411,88 +584,104 @@ private:
             return;
         }
 
-        update_world_pose();  // failure leaves has_odom_=false; pose-dependent
-                               // sections below already guard on has_odom_
+        // ブラックリストの定期クリア
+        if ((now() - last_blacklist_clear_).seconds() > blacklist_clear_sec_) {
+            if (!nav_blacklist_.empty()) {
+                RCLCPP_INFO(get_logger(), "Clearing blacklist (%zu entries)", nav_blacklist_.size());
+                nav_blacklist_.clear();
+            }
+            last_blacklist_clear_ = now();
+        }
 
+        update_world_pose();  // failure leaves has_odom_=false
+
+        // gap_targets（フロンティア抽出）はロボット座標系基準なので、位置がなくても
+        // 計算自体はできるが、ワールド座標への変換・ストアへの追加にはTFが要る。
         const auto ps = sensor_proc::process(
             latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_,
-            robot_r_, fcone_, min_gap_w_, gap_run_w_deg_, gap_run_tol_m_);
+            robot_r_, fcone_, gap_params_);
 
-        // Convert gap targets (robot-frame polar + width) to world frontiers
-        if (has_odom_) {
-            for (const auto& [a, d, w] : ps.gap_targets) {
-                const double wa = pose_.yaw + a;
-                add_frontier(pose_.x + d * std::cos(wa),
-                             pose_.y + d * std::sin(wa), w);
+        if (!has_odom_) return;
+
+        for (const auto& [a, d, w] : ps.gap_targets) {
+            const double wa = pose_.yaw + a;
+            add_frontier(pose_.x + d * std::cos(wa), pose_.y + d * std::sin(wa), w);
+        }
+        prune_frontiers();
+
+        // 進捗タイムアウト監視
+        if (state_ == State::MOVING) {
+            const double elapsed = (now() - last_progress_time_).seconds();
+            if (elapsed > progress_timeout_) {
+                RCLCPP_WARN(get_logger(), "Progress timeout (%.1fs) -> cancel and replan", elapsed);
+                nav_blacklist_.emplace_back(current_goal_.pose.position.x,
+                                            current_goal_.pose.position.y);
+                cancel_current_goal();
             }
-            prune_frontiers();
         }
 
-        geometry_msgs::msg::Twist cmd;
-
-        if (ps.emergency) {
-            cmd.angular.z = ps.avoidance_angular_z;
-            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
-                "EMERGENCY: obstacle inside %.2fm fence", emerg_);
-
-        } else if (!ps.front_blocked) {
-            // Select best frontier: cost = |bearing| + 0.25*dist − 0.3*width + peer_penalty
-            // Prefer forward + nearby + wide openings; penalize frontiers near peer positions.
-            double best_angle = 0.0;
-            double best_cost  = std::numeric_limits<double>::max();
-            double best_fx = 0.0, best_fy = 0.0;
-            bool   found = false;
-
-            if (has_odom_) {
-                // Voronoi有効時は自分の担当範囲だけを候補にする。
-                // マスク未受信・自領域に候補なしなら次の更新まで待つ。
-                const bool respect_territory = use_voronoi_;
-                for (const auto& f : frontier_store_) {
-                    if (is_visited(f.x, f.y)) continue;
-                    if (!in_own_territory(f.x, f.y, respect_territory)) continue;
-
-                    const double dx   = f.x - pose_.x;
-                    const double dy   = f.y - pose_.y;
-                    const double raw  = std::atan2(dy, dx) - pose_.yaw;
-                    const double ang  = std::atan2(std::sin(raw), std::cos(raw));
-                    const double dist = std::hypot(dx, dy);
-                    double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
-
-                    // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
-                    const double avoid_r = dup_r_ * 2.0;
-                    for (const auto& [peer_ns, hist] : peer_histories_) {
-                        if (hist.empty()) continue;
-                        const auto& p  = hist.back();
-                        const double d = std::hypot(f.x - p.x, f.y - p.y);
-                        if (d < avoid_r)
-                            cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
-                    }
-
-                    if (cost < best_cost) {
-                        best_cost  = cost;
-                        best_angle = ang;
-                        best_fx    = f.x;
-                        best_fy    = f.y;
-                        found      = true;
-                    }
-                }
-                if (found) {
-                    target_x_   = best_fx;
-                    target_y_   = best_fy;
-                    has_target_ = true;
-                }
-            }
-
-            cmd.linear.x = lin_;
-            if (std::abs(best_angle) > 0.15)
-                cmd.angular.z = ang_ * 0.4 * (best_angle > 0.0 ? 1.0 : -1.0);
-
-        } else {
-            cmd.angular.z = ps.avoidance_angular_z;
-            RCLCPP_DEBUG(get_logger(), "blocked: steer=%.2f", cmd.angular.z);
+        // ─── チャタリング防止: 現在向かっている目標がまだ有効なら維持する ───
+        if (state_ == State::MOVING) {
+            const double gx = current_goal_.pose.position.x;
+            const double gy = current_goal_.pose.position.y;
+            const bool still_in_store = std::any_of(frontier_store_.begin(), frontier_store_.end(),
+                [&](const Frontier& f) { return std::hypot(f.x - gx, f.y - gy) < 1.0; });
+            const bool still_valid = still_in_store && !is_visited(gx, gy) &&
+                !is_map_explored(gx, gy) && in_own_territory(gx, gy, use_voronoi_);
+            if (still_valid) return;
+            RCLCPP_INFO(get_logger(),
+                "Current target vanished, claimed, explored, or left own territory. Replanning...");
+            cancel_current_goal();
         }
 
-        cmd_pub_->publish(cmd);
+        // ベストなフロンティアを選択
+        // cost = |bearing| + 0.25*dist − 0.3*width + peer_penalty
+        // 前方・近距離・広い開口を優先し、相手ロボットの近くは減点する。
+        double best_cost = std::numeric_limits<double>::max();
+        double best_fx = 0.0, best_fy = 0.0;
+        bool   found = false;
+
+        // Voronoi有効時は自分の担当範囲だけを候補にする。
+        // マスク未受信・自領域に候補なしなら次の更新まで待つ。
+        const bool respect_territory = use_voronoi_;
+        for (const auto& f : frontier_store_) {
+            if (is_visited(f.x, f.y)) continue;
+            if (is_blacklisted(f.x, f.y)) continue;
+            if (!in_own_territory(f.x, f.y, respect_territory)) continue;
+
+            const double dx   = f.x - pose_.x;
+            const double dy   = f.y - pose_.y;
+            const double raw  = std::atan2(dy, dx) - pose_.yaw;
+            const double ang  = std::atan2(std::sin(raw), std::cos(raw));
+            const double dist = std::hypot(dx, dy);
+            double cost = std::abs(ang) + 0.25 * dist - 0.3 * f.width;
+
+            // Penalize frontiers near peer robots (linear falloff within 2*dup_r_)
+            const double avoid_r = dup_r_ * 2.0;
+            for (const auto& [peer_ns, hist] : peer_histories_) {
+                if (hist.empty()) continue;
+                const auto& p  = hist.back();
+                const double d = std::hypot(f.x - p.x, f.y - p.y);
+                if (d < avoid_r)
+                    cost += (M_PI * 0.5) * (1.0 - d / avoid_r);
+            }
+
+            if (cost < best_cost) {
+                best_cost = cost;
+                best_fx   = f.x;
+                best_fy   = f.y;
+                found     = true;
+            }
+        }
+
+        if (!found) {
+            RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                "No reachable frontier (store=%zu, blacklist=%zu)",
+                frontier_store_.size(), nav_blacklist_.size());
+            return;
+        }
+
+        send_nav_goal(best_fx, best_fy);
     }
 
     // ------------------------------------------------------------------
@@ -603,6 +792,6 @@ private:
 
 int main(int argc, char* argv[]) {
     rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<SensorExploreNode>());
+    rclcpp::spin(std::make_shared<SensorMbExploreNode>());
     rclcpp::shutdown();
 }

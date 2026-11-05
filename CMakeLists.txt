@@ -56,6 +56,19 @@ ament_target_dependencies(voronoi_lib
   nav_msgs
 )
 
+# LiDARギャップ抽出ライブラリ (docs/gap_extraction_spec.md の移植)。
+# sensor_processor.cpp から使う。golden データでの検証用実行体からも使うため、
+# sensor_explore_node 等とは独立したライブラリにしてある。
+add_library(gap_extraction_lib
+  src/gap_extraction.cpp
+)
+target_include_directories(gap_extraction_lib PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+ament_target_dependencies(gap_extraction_lib
+  sensor_msgs
+)
+
 # ==================== Build C++ Executables ====================
 
 # 1. Sensor Explore Node
@@ -81,6 +94,7 @@ target_include_directories(sensor_explore_node PRIVATE
 target_link_libraries(sensor_explore_node
   ${PCL_LIBRARIES}
   voronoi_lib
+  gap_extraction_lib
 )
 
 # 2. Explore Supervisor
@@ -138,6 +152,7 @@ target_include_directories(sensor_mb_explore_node PRIVATE
 target_link_libraries(sensor_mb_explore_node
   ${PCL_LIBRARIES}
   voronoi_lib
+  gap_extraction_lib
 )
 
 add_executable(frontier_explore_node src/frontier_explore_node.cpp)
@@ -223,6 +238,15 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  # gap_extraction の golden データ照合(ament test化はせず、手動実行する
+  # 検証ツールとしてビルドだけする。colcon test 時間に影響させないため)。
+  add_executable(test_gap_extraction test/test_gap_extraction.cpp)
+  target_include_directories(test_gap_extraction PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  )
+  target_link_libraries(test_gap_extraction gap_extraction_lib)
+  ament_target_dependencies(test_gap_extraction sensor_msgs)
 endif()
 
 ament_package()

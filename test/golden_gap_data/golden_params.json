@@ -1,0 +1,1 @@
+{"medianWin":3,"minOpenSamples":3,"minGapWidth":0.6,"targetPush":0.5,"lambda":0.17453292519943295,"sigma":0.01,"minJump":0.5,"minSupport":3,"supportOpenEdges":false,"jumpTargetMode":"between","jumpRatio":0.5,"cornerOffset":0.35}

@@ -50,9 +50,19 @@ public:
         declare_parameter("dup_time",      600.0);   // match 10-min history window
         declare_parameter("frontier_ttl",  300.0);
         declare_parameter("front_cone_deg", 30.0);
-        declare_parameter("min_gap_width",   0.4);
-        declare_parameter("gap_run_width_deg",   5.0);
-        declare_parameter("gap_run_tolerance_m", 0.05);
+        // ギャップ抽出(docs/gap_extraction_spec.md, gap_extraction.hpp)
+        declare_parameter("gap_median_win",        3);
+        declare_parameter("gap_min_open_samples",  3);
+        declare_parameter("gap_min_width",         0.6);
+        declare_parameter("gap_target_push",       0.5);
+        declare_parameter("gap_abd_lambda_deg",   10.0);
+        declare_parameter("gap_abd_sigma",         0.01);
+        declare_parameter("gap_min_jump",          0.5);
+        declare_parameter("gap_min_support",       3);
+        declare_parameter("gap_support_open_edges", false);
+        declare_parameter("gap_jump_target_mode",  std::string("between"));
+        declare_parameter("gap_jump_ratio",        0.5);
+        declare_parameter("gap_corner_offset",     0.35);
         declare_parameter("odom_frame", std::string("odom"));
         declare_parameter("global_frame", std::string("map"));
         declare_parameter("use_voronoi_partition", true);
@@ -71,9 +81,23 @@ public:
         dup_t_        = get_parameter("dup_time").as_double();
         frontier_ttl_ = get_parameter("frontier_ttl").as_double();
         fcone_        = get_parameter("front_cone_deg").as_double();
-        min_gap_w_    = get_parameter("min_gap_width").as_double();
-        gap_run_w_deg_  = get_parameter("gap_run_width_deg").as_double();
-        gap_run_tol_m_  = get_parameter("gap_run_tolerance_m").as_double();
+
+        gap_params_.median_win         = static_cast<int>(get_parameter("gap_median_win").as_int());
+        gap_params_.min_open_samples   = static_cast<int>(get_parameter("gap_min_open_samples").as_int());
+        gap_params_.min_gap_width      = get_parameter("gap_min_width").as_double();
+        gap_params_.target_push        = get_parameter("gap_target_push").as_double();
+        gap_params_.abd_lambda_deg     = get_parameter("gap_abd_lambda_deg").as_double();
+        gap_params_.abd_sigma          = get_parameter("gap_abd_sigma").as_double();
+        gap_params_.min_jump           = get_parameter("gap_min_jump").as_double();
+        gap_params_.min_support        = static_cast<int>(get_parameter("gap_min_support").as_int());
+        gap_params_.support_open_edges = get_parameter("gap_support_open_edges").as_bool();
+        gap_params_.jump_target_mode   =
+            (get_parameter("gap_jump_target_mode").as_string() == "corner")
+                ? gap_extraction::Params::JumpTargetMode::kCorner
+                : gap_extraction::Params::JumpTargetMode::kBetween;
+        gap_params_.jump_ratio         = get_parameter("gap_jump_ratio").as_double();
+        gap_params_.corner_offset      = get_parameter("gap_corner_offset").as_double();
+
         odom_frame_   = get_parameter("odom_frame").as_string();
         global_frame_ = get_parameter("global_frame").as_string();
         use_voronoi_  = get_parameter("use_voronoi_partition").as_bool();
@@ -156,13 +180,13 @@ public:
         RCLCPP_INFO(get_logger(),
             "sensor_explore: safe=%.2f r=%.3f emerg=%.2f "
             "dup_r=%.1f dup_t=%.0f gap_w=%.2f ns=%s",
-            safe_, robot_r_, emerg_, dup_r_, dup_t_, min_gap_w_, ns_.c_str());
+            safe_, robot_r_, emerg_, dup_r_, dup_t_, gap_params_.min_gap_width, ns_.c_str());
     }
 
 private:
     double lin_, ang_, safe_, vfh_t_, v_deg_, emerg_, robot_r_;
-    double dup_r_, dup_t_, frontier_ttl_, fcone_, min_gap_w_;
-    double gap_run_w_deg_, gap_run_tol_m_;
+    double dup_r_, dup_t_, frontier_ttl_, fcone_;
+    gap_extraction::Params gap_params_;
     std::string odom_frame_;
     bool use_voronoi_;
     nav_msgs::msg::OccupancyGrid::SharedPtr voronoi_mask_;
@@ -415,7 +439,7 @@ private:
 
         const auto ps = sensor_proc::process(
             latest_scan_, safe_, vfh_t_, v_deg_, emerg_, ang_,
-            robot_r_, fcone_, min_gap_w_, gap_run_w_deg_, gap_run_tol_m_);
+            robot_r_, fcone_, gap_params_);
 
         // Convert gap targets (robot-frame polar + width) to world frontiers
         if (has_odom_) {
