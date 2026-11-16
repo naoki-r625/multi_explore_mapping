@@ -170,6 +170,8 @@ def launch_setup(context, *args, **kwargs):
         world_path = os.path.join(pkg_my_mapping, 'worlds', 'edit_map_world.world')
     elif world_type == 'rmf':
         world_path, poses = _setup_rmf_world(context, pkg_my_mapping, logs)
+    elif world_type == 'willow':
+        world_path = os.path.join(pkg_my_mapping, 'worlds', 'willowgarage.world')
     else:  # 'aws'
         # 元の no_roof_small_warehouse から PalletJackB / TrashCanC を除いたもの
         # (burgerのLiDAR高さで衝突しうるため)。元のワールドは aws パッケージ側に残っている。
@@ -387,7 +389,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'world_type',
             default_value='aws',
-            description='Select world environment: [aws, custom, edit_map, rmf]'
+            description='Select world environment: [aws, custom, edit_map, rmf, willow]'
         ),
         DeclareLaunchArgument(
             'rmf_world',

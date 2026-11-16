@@ -1,0 +1,77 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+    <world name="willowgarage_office">
+        <include>
+            <uri>model://sun</uri>
+        </include>
+        <include>
+            <uri>model://ground_plane</uri>
+        </include>
+
+        <include>
+            <uri>model://willowgarage_patched</uri>
+            <pose>-20 -20 0 0 0 0</pose>
+        </include>
+
+        <!--
+          willowgarage モデルの外壁には実在の建物由来の開口部(荷捌き場など)があり
+          そこからロボットが屋外に出てしまうため、建物のバウンディングボックス
+          (x: -19.98〜38.64, y: -20.85〜24.83) の外側を囲む安全柵を追加する。
+        -->
+        <model name="safety_fence">
+            <static>true</static>
+            <link name="south_wall">
+                <pose>9.5 -22 0.75 0 0 0</pose>
+                <collision name="collision">
+                    <geometry><box><size>61.2 0.2 1.5</size></box></geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry><box><size>61.2 0.2 1.5</size></box></geometry>
+                    <material>
+                        <ambient>1 0 0 0.3</ambient>
+                        <diffuse>1 0 0 0.3</diffuse>
+                    </material>
+                </visual>
+            </link>
+            <link name="north_wall">
+                <pose>9.5 26 0.75 0 0 0</pose>
+                <collision name="collision">
+                    <geometry><box><size>61.2 0.2 1.5</size></box></geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry><box><size>61.2 0.2 1.5</size></box></geometry>
+                    <material>
+                        <ambient>1 0 0 0.3</ambient>
+                        <diffuse>1 0 0 0.3</diffuse>
+                    </material>
+                </visual>
+            </link>
+            <link name="west_wall">
+                <pose>-21 2 0.75 0 0 0</pose>
+                <collision name="collision">
+                    <geometry><box><size>0.2 48.2 1.5</size></box></geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry><box><size>0.2 48.2 1.5</size></box></geometry>
+                    <material>
+                        <ambient>1 0 0 0.3</ambient>
+                        <diffuse>1 0 0 0.3</diffuse>
+                    </material>
+                </visual>
+            </link>
+            <link name="east_wall">
+                <pose>40 2 0.75 0 0 0</pose>
+                <collision name="collision">
+                    <geometry><box><size>0.2 48.2 1.5</size></box></geometry>
+                </collision>
+                <visual name="visual">
+                    <geometry><box><size>0.2 48.2 1.5</size></box></geometry>
+                    <material>
+                        <ambient>1 0 0 0.3</ambient>
+                        <diffuse>1 0 0 0.3</diffuse>
+                    </material>
+                </visual>
+            </link>
+        </model>
+    </world>
+</sdf>
